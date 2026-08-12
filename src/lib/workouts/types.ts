@@ -58,6 +58,21 @@ export type WorkoutSessionSummary = {
   completed_sets?: number;
   elapsed_seconds?: number;
   exercise_log?: WorkoutSessionExerciseLog[];
+  rep_count?: number;
+  average_depth?: number;
+  form_score?: number;
+  perceived_difficulty?: "too_easy" | "just_right" | "too_hard";
+};
+
+export type CoachingFeedback = {
+  headline: string;
+  summary: string;
+  wins: string[];
+  improvements: string[];
+  difficulty_fit: string;
+  suggestions: string[];
+  next_time_focus: string;
+  metrics?: Record<string, number | null>;
 };
 
 export type WorkoutSessionRecord = {
@@ -68,6 +83,18 @@ export type WorkoutSessionRecord = {
   duration_minutes: number | null;
   session_data: WorkoutSessionSummary | null;
   completed_at: string | null;
+  created_at: string;
+};
+
+export type AiFeedbackRecord = {
+  id: string;
+  user_id: string;
+  session_id: string;
+  workout_plan_id: string | null;
+  feedback: CoachingFeedback;
+  feedback_text: string;
+  suggestions: string[];
+  source_payload: Record<string, unknown> | null;
   created_at: string;
 };
 

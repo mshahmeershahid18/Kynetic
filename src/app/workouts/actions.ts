@@ -3,10 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { generateWorkoutPlan } from "@/lib/ai-service";
+import { generateCoachingFeedback, generateWorkoutPlan } from "@/lib/ai-service";
 import type { FitnessProfile } from "@/lib/profiles/types";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { toWorkoutProfileSnapshot, type WorkoutSessionSummary } from "@/lib/workouts/types";
+import { toWorkoutProfileSnapshot, type WorkoutPlanRecord, type WorkoutSessionRecord, type WorkoutSessionSummary } from "@/lib/workouts/types";
 
 async function requireUserAndProfile() {
   const supabase = createServerSupabaseClient();
@@ -59,7 +59,7 @@ export async function generateWorkoutAction() {
 }
 
 export async function completeWorkoutAction(formData: FormData) {
-  const { supabase, user } = await requireUserAndProfile();
+  const { supabase, user, profile } = await requireUserAndProfile();
   const planId = String(formData.get("plan_id") ?? "");
   const duration = Number(formData.get("duration_minutes") ?? 0);
   const rawSessionData = formData.get("session_data");
@@ -84,20 +84,69 @@ export async function completeWorkoutAction(formData: FormData) {
 
   if (!planOwner) redirect("/dashboard?message=Workout%20not%20found");
 
-  const { error } = await supabase.from("workout_sessions").insert({
+  const { data: insertedSession, error } = await supabase
+    .from("workout_sessions")
+    .insert({
+      user_id: user.id,
+      workout_plan_id: planId,
+      status: "completed",
+      duration_minutes: Number.isFinite(duration) && duration > 0 ? duration : null,
+      session_data: sessionData,
+      completed_at: new Date().toISOString(),
+    })
+    .select("*")
+    .single();
+
+  if (error || !insertedSession) {
+    redirect(`/workouts/${planId}?message=${encodeURIComponent(error?.message ?? "Unable to save session")}`);
+  }
+
+  const { data: planRecord } = await supabase
+    .from("workout_plans")
+    .select("*")
+    .eq("id", planId)
+    .eq("user_id", user.id)
+    .single();
+
+  const { data: recentSessions } = await supabase
+    .from("workout_sessions")
+    .select("*")
+    .eq("user_id", user.id)
+    .neq("id", insertedSession.id)
+    .order("completed_at", { ascending: false })
+    .limit(5);
+
+  const { data: recentFeedback } = await supabase
+    .from("ai_feedback")
+    .select("feedback, feedback_text, suggestions, created_at")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false })
+    .limit(5);
+
+  const payload = {
+    plan: (planRecord as WorkoutPlanRecord | null)?.plan ?? null,
+    session: { ...(insertedSession as WorkoutSessionRecord), ...((insertedSession as WorkoutSessionRecord).session_data ?? {}) },
+    recent_sessions: recentSessions ?? [],
+    recent_feedback: recentFeedback ?? [],
+    profile,
+  };
+
+  const { feedback, source } = await generateCoachingFeedback(payload);
+  const { error: feedbackError } = await supabase.from("ai_feedback").insert({
     user_id: user.id,
+    session_id: insertedSession.id,
     workout_plan_id: planId,
-    status: "completed",
-    duration_minutes: Number.isFinite(duration) && duration > 0 ? duration : null,
-    session_data: sessionData,
-    completed_at: new Date().toISOString(),
+    feedback,
+    feedback_text: feedback.summary,
+    suggestions: feedback.suggestions,
+    source_payload: { ...payload, feedback_source: source },
   });
 
-  if (error) {
-    redirect(`/workouts/${planId}?message=${encodeURIComponent(error.message)}`);
+  if (feedbackError) {
+    redirect(`/dashboard?message=${encodeURIComponent(`Workout completed, but feedback could not be saved: ${feedbackError.message}`)}`);
   }
 
   revalidatePath("/dashboard");
   revalidatePath(`/workouts/${planId}`);
-  redirect("/dashboard?message=Workout%20completed");
+  redirect(`/dashboard?message=${encodeURIComponent("Workout completed — AI coaching feedback is ready")}`);
 }

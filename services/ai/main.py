@@ -3,10 +3,12 @@ from typing import Any
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
+from feedback_engine import build_feedback
+
 app = FastAPI(
     title="Kynetic AI Service",
-    version="0.2.0",
-    description="Deterministic workout generation endpoint for the Kynetic MVP.",
+    version="0.3.0",
+    description="Deterministic workout generation and coaching feedback endpoints for the Kynetic MVP.",
 )
 
 
@@ -26,6 +28,14 @@ class ProfileSnapshot(BaseModel):
 class GenerateRequest(BaseModel):
     profile: ProfileSnapshot = Field(default_factory=ProfileSnapshot)
     context: dict[str, Any] = Field(default_factory=dict)
+
+
+class FeedbackRequest(BaseModel):
+    plan: dict[str, Any] | None = None
+    session: dict[str, Any] = Field(default_factory=dict)
+    recent_sessions: list[dict[str, Any]] = Field(default_factory=list)
+    recent_feedback: list[dict[str, Any]] = Field(default_factory=list)
+    profile: dict[str, Any] | None = None
 
 
 EXERCISES: list[dict[str, Any]] = [
@@ -146,3 +156,15 @@ def generate_workout(payload: GenerateRequest) -> dict[str, Any]:
         ],
     }
     return {"status": "ok", "plan": plan, "received_profile": profile.model_dump()}
+
+
+@app.post("/feedback")
+def generate_feedback(payload: FeedbackRequest) -> dict[str, Any]:
+    feedback = build_feedback(
+        plan=payload.plan,
+        session=payload.session,
+        recent_sessions=payload.recent_sessions,
+        recent_feedback=payload.recent_feedback,
+        profile=payload.profile,
+    )
+    return {"status": "ok", "feedback": feedback}

@@ -1,6 +1,7 @@
 -- Phase 2 auth/profile foundation schema for Supabase.
 -- Run this in the Supabase SQL editor after enabling Google OAuth in Auth providers.
 
+drop table if exists public.ai_feedback cascade;
 drop table if exists public.workout_sessions cascade;
 drop table if exists public.workout_plans cascade;
 drop table if exists public.profiles cascade;

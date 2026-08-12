@@ -2,8 +2,8 @@ import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { AnimatedSection } from '@/components/landing/animated-section'
 import { GenerateWorkoutButton, WorkoutHistory } from '@/components/workouts/workout-plan-card'
-import type { WorkoutPlanRecord, WorkoutSessionRecord } from '@/lib/workouts/types'
-import { Activity, CalendarDays, Dumbbell, Target, Timer, User as UserIcon } from 'lucide-react'
+import type { AiFeedbackRecord, WorkoutPlanRecord, WorkoutSessionRecord } from '@/lib/workouts/types'
+import { Activity, CalendarDays, Dumbbell, Lightbulb, Target, Timer, User as UserIcon } from 'lucide-react'
 
 // Avatar visually reflects BMI & Experience
 function Avatar({ state }: { state: string }) {
@@ -67,8 +67,16 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
     .order('completed_at', { ascending: false })
     .limit(12)
 
+  const { data: aiFeedback } = await supabase
+    .from('ai_feedback')
+    .select('*')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false })
+    .limit(3)
+
   const plans = (workoutPlans ?? []) as WorkoutPlanRecord[]
   const sessions = (workoutSessions ?? []) as WorkoutSessionRecord[]
+  const feedbackRecords = (aiFeedback ?? []) as AiFeedbackRecord[]
   const completedCount = sessions.filter((session) => session.status === 'completed').length
   const totalMinutes = sessions.reduce((total, session) => total + (session.duration_minutes ?? 0), 0)
   const latestPlan = plans[0]
@@ -148,6 +156,39 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
                   <p className="text-2xl font-black">{totalMinutes}</p>
                 </div>
               </div>
+            </AnimatedSection>
+
+            <AnimatedSection className="rounded-[2.5rem] border border-border bg-card p-8">
+              <div className="mb-6 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
+                <div>
+                  <h2 className="text-2xl font-black tracking-tight">Latest coaching feedback</h2>
+                  <p className="mt-2 text-sm text-muted-foreground">Saved after completed sessions and reused as context for future coaching.</p>
+                </div>
+              </div>
+              {feedbackRecords.length ? (
+                <div className="space-y-4">
+                  {feedbackRecords.map((record) => (
+                    <article key={record.id} className="rounded-[2rem] border border-border bg-background p-5">
+                      <div className="flex items-start gap-3">
+                        <Lightbulb className="mt-1 h-5 w-5 shrink-0 text-primary" />
+                        <div>
+                          <h3 className="font-black">{record.feedback.headline}</h3>
+                          <p className="mt-2 text-sm leading-6 text-muted-foreground">{record.feedback.summary}</p>
+                        </div>
+                      </div>
+                      <ul className="mt-4 grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
+                        {record.feedback.suggestions.slice(0, 2).map((suggestion) => (
+                          <li key={suggestion} className="rounded-2xl bg-muted p-3">• {suggestion}</li>
+                        ))}
+                      </ul>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-[2rem] border border-dashed border-border bg-muted/40 p-6 text-sm leading-6 text-muted-foreground">
+                  Complete a guided or manual workout to receive personalized AI coaching on reps, form, difficulty fit, and next-session focus.
+                </div>
+              )}
             </AnimatedSection>
 
             <AnimatedSection className="rounded-[2.5rem] border border-border bg-card p-8">

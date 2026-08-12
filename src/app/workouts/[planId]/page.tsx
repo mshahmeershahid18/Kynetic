@@ -5,7 +5,7 @@ import { ArrowLeft, CheckCircle2, Clock, Dumbbell, Target, Play } from "lucide-r
 
 import { completeWorkoutAction } from "@/app/workouts/actions";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import type { WorkoutPlanRecord } from "@/lib/workouts/types";
+import type { AiFeedbackRecord, WorkoutPlanRecord } from "@/lib/workouts/types";
 
 export default async function WorkoutPlanPage({ params, searchParams }: { params: { planId: string }; searchParams?: { message?: string } }) {
   const supabase = createServerSupabaseClient();
@@ -30,8 +30,17 @@ export default async function WorkoutPlanPage({ params, searchParams }: { params
     .eq("user_id", user.id)
     .order("completed_at", { ascending: false });
 
+  const { data: feedback } = await supabase
+    .from("ai_feedback")
+    .select("*")
+    .eq("workout_plan_id", params.planId)
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false })
+    .limit(3);
+
   const workout = plan as WorkoutPlanRecord;
   const completed = Boolean(sessions?.some((session) => session.status === "completed"));
+  const feedbackRecords = (feedback ?? []) as AiFeedbackRecord[];
 
   return (
     <main className="container-shell py-10">
@@ -104,6 +113,26 @@ export default async function WorkoutPlanPage({ params, searchParams }: { params
         <Panel title="Cooldown"><OrderedList items={workout.plan.cooldown} /></Panel>
         <Panel title="AI coaching notes"><OrderedList items={workout.plan.coaching_notes} /></Panel>
       </section>
+
+      {feedbackRecords.length ? (
+        <section className="mt-6 rounded-[2rem] border border-border bg-card p-6">
+          <p className="text-sm font-black uppercase tracking-[0.2em] text-primary">Post-session coach</p>
+          <h2 className="mt-2 text-2xl font-black">Saved feedback for this plan</h2>
+          <div className="mt-5 space-y-4">
+            {feedbackRecords.map((record) => (
+              <article key={record.id} className="rounded-2xl bg-background p-5">
+                <h3 className="font-black">{record.feedback.headline}</h3>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">{record.feedback.summary}</p>
+                <div className="mt-4 grid gap-4 md:grid-cols-3">
+                  <MiniList title="Wins" items={record.feedback.wins} />
+                  <MiniList title="Improve" items={record.feedback.improvements} />
+                  <MiniList title="Next" items={record.feedback.suggestions} />
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
     </main>
   );
 }
@@ -118,4 +147,15 @@ function Panel({ title, eyebrow, children }: { title: string; eyebrow?: string; 
 
 function OrderedList({ items }: { items: string[] }) {
   return <ol className="space-y-3 text-sm leading-6 text-muted-foreground">{items.map((item, index) => <li key={item} className="rounded-2xl bg-background p-4"><span className="mr-2 font-black text-primary">{index + 1}.</span>{item}</li>)}</ol>;
+}
+
+function MiniList({ title, items }: { title: string; items: string[] }) {
+  return (
+    <div>
+      <p className="text-xs font-black uppercase tracking-widest text-primary">{title}</p>
+      <ul className="mt-2 space-y-2 text-sm leading-6 text-muted-foreground">
+        {items.slice(0, 3).map((item) => <li key={item}>• {item}</li>)}
+      </ul>
+    </div>
+  );
 }
