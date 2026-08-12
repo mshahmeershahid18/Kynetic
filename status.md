@@ -1,52 +1,110 @@
 # Kynetic Project Status
 
-Based on an analysis of the current codebase and a comparison with the `plan.md` document, here is the updated status of the project:
+Status of the codebase against `plan.md`, verified against the source rather
+than assumed. Last verified: 2026-08-13.
 
-## Phase 0 — Foundation and setup (🟢 Completed)
-The skeleton of the project is fully implemented and running:
-* **Next.js & Tailwind:** Scaffolded with TypeScript and App Router.
-* **Supabase:** The client is wired up in `src/lib/supabase` and environment variable checks are in place.
-* **Theming:** A dark/light theme system is implemented via `next-themes` and a toggle component.
-* **GSAP Animations:** A base animation helper is set up in `src/lib/animations.ts` and used on the landing page via `AnimatedSection`.
-* **Python FastAPI:** The AI service is scaffolded with a `/health` endpoint and a placeholder `/generate` endpoint.
+## Phase 0 — Foundation (Complete)
+Next.js 14 App Router + TypeScript + Tailwind, Supabase wired through
+`src/lib/supabase`, dark/light theming via `next-themes`, GSAP helper in
+`src/lib/animations.ts`, and a FastAPI service in `services/ai` with a
+Dockerfile and health check.
 
-## Phase 1 — Landing, auth, and onboarding (🟢 Completed)
-The entire authentication and profile creation loop is complete:
-* **Auth System:** Fully functional with Next.js Server Actions, middleware route protection, and Google OAuth callback logic.
-* **UI Pages:** Beautiful animated `Login` and `Signup` pages are live.
-* **Onboarding Flow:** Multi-step animated form that securely captures user metrics, automatically computes BMI, and resolves the initial Avatar State.
-* **Dashboard & Avatar v1:** The protected dashboard displays the stylized Avatar component alongside user progress stats.
-* **Transactional Email:** A Nodemailer route handler is built at `/api/email/welcome` to send an email after onboarding.
+## Phase 1 — Landing, auth, onboarding, avatar (Complete)
+Email/password and Google OAuth via Supabase Auth, middleware route protection,
+password reset, Nodemailer welcome email, and a multi-step onboarding flow that
+computes BMI and resolves the avatar state.
 
-## Phase 2 — Workout system (🟢 Completed)
-The entire end-to-end workout generation and playback system is built:
-* **AI Generation**: Dashboard contains a "Generate AI workout" button which hits the Python FastAPI `generate` endpoint.
-* **Data Persistence**: `workout_plans` and `workout_sessions` securely save to Supabase.
-* **Exercise Library**: `exercises` table added to the Supabase schema.
-* **Session Player**: Interactive, GSAP-animated session player built at `/workouts/[planId]/play` with Warmup, Exercise (Sets/Reps), Rest countdown timer, Cooldown, and Summary states. Completed sessions update Supabase.
+**Avatar is now a real 3D model.** `src/lib/avatar/build-figure.ts` assembles a
+greyscale humanoid in Three.js whose proportions are driven by two continuous
+parameters — body mass from BMI, muscularity from experience level. It is
+rendered by `src/components/dashboard/avatar-3d.tsx` with three-point lighting,
+idle rotation, and drag-to-orbit. Because the inputs are continuous, a small
+weight change visibly changes the figure rather than waiting for a bucket
+boundary. This is the parametric option `plan.md` described, not the asset matrix.
 
-## Phase 3 — Real time computer vision (🟢 Completed)
-The AI vision capabilities have been fully integrated into the Kynetic workout player:
-* **MediaPipe Tasks Vision:** Installed `@mediapipe/tasks-vision` to run ML models locally via WebAssembly.
-* **Live Camera Feed:** Created a `PoseTracker` component that securely accesses the user's webcam (`getUserMedia`).
-* **Squat Detection:** Implemented custom biomechanical geometry functions to measure hip, knee, and ankle angles continuously to detect full ranges of motion.
-* **Auto Rep Counting:** The tracker automatically counts complete reps and advances the workout to the rest phase without manual clicks. Form feedback (e.g., "Good depth!") is delivered in real-time.
+## Phase 2 — Workout system (Complete)
+**Generation is Gemini-backed.** `services/ai/gemini_client.py` prompts Gemini
+with the user's profile, recent performance, and the exercise library, using
+structured JSON output. Every returned plan is re-validated server side against
+the library (`_sanitize_plan`) so a hallucinated or equipment-inappropriate
+exercise can never reach the user.
 
-## Phase 4 — AI coach (🟢 Completed)
-The Python engine takes the completed session summary, recent workout history, and form feedback to generate personalized coaching advice. The Next.js app sends this data upon workout completion and stores the AI's response in the `ai_feedback` table. The dashboard correctly pulls and displays the latest feedback dynamically.
+**Exercise library is real.** The `exercises` table is created and seeded by
+`supabase/seed-exercises.sql` with instructions, coaching cues, demo media paths,
+and a `vision_kind` capability flag. Generated plans reference library slugs, so
+every prescribed movement carries its demo and its tracking capability.
 
-## Phase 5 — Adaptive fitness system (🟢 Completed)
-The Next.js app now queries your 5 most recent `workout_sessions` and `ai_feedback` records and passes them dynamically to the Python engine when generating a new plan. The Python backend reads this history, calculates your recent completion rate and form scores, and will bump your difficulty up (e.g. adding sets/reps) if you score > 95% completion and > 85 form score. Finally, an auto-leveling hook increments your profile's `experience_level` as you complete milestone workouts (5, 15), instantly updating your visible Avatar's muscle mass.
+Session player at `/workouts/[planId]/play` handles warm-up, sets, rest timing,
+demos, and completion.
 
-## Phase 6 — Dashboard and gamification (🟢 Completed)
-The dashboard operates as the central gamification hub. It derives an advanced suite of metrics dynamically from the `workout_sessions` table without requiring additional database schema overhead. This includes calculating RPG-style XP, User Levels, current and longest streaks, and compiling a 7-day volume progress chart. It also features an achievements system (e.g., "Rep century", "Week warrior") and generates dynamic text insights based on recent performance.
+## Phase 3 — Computer vision (Complete, deliberately scoped)
+`src/lib/vision/exercise-analyzers.ts` is a pure state machine supporting four
+simple bodyweight movements: **squat, push-up, lunge, glute bridge**. It measures
+joint angles, counts reps, scores form, and emits live cues.
+
+**Complex and loaded lifts are intentionally excluded.** Deadlifts, presses, and
+weighted work have `vision_kind = NULL` and the UI explains why rather than
+pretending to coach them — a single webcam cannot judge them safely.
+
+Two entry points share the exact same analyzers:
+- **Live guidance** (`live-form-coach.tsx`) — camera, skeleton overlay, live rep
+  count, depth bar, and coaching cues during a session.
+- **Video upload** (`video-form-check.tsx`, page at `/form-check`) — for people
+  who would rather film a set than run a live session. Decoded and analysed
+  entirely in the browser; the video never leaves the device, only the summary
+  is saved to `form_analyses`.
+
+## Phase 4 — AI coach (Complete)
+`/feedback` prompts Gemini with the session summary, camera form data, and recent
+history, returning structured coaching. The deterministic `feedback_engine.py`
+remains as a fallback so completion never fails.
+
+## Phase 5 — Adaptive loop (Complete)
+Recent sessions and feedback are passed into generation. Completion rate and form
+scores adjust difficulty. Completing 5 / 15 / 40 sessions raises the experience
+level, which immediately changes the 3D avatar's musculature and is snapshotted
+into `progress`.
+
+## Phase 6 — Dashboard (Complete)
+Rebuilt on a single restrained visual system: consistent 2xl radii, semibold
+weights, and a two-column layout. XP, levels, streaks, achievements, a 7-day
+chart, and insights are all derived from `workout_sessions` at read time.
 
 ---
-**Summary:** The Kynetic MVP is **100% Complete**! 🎉
-The project has successfully shipped all 6 phases:
-* **Phase 0 & 1:** Secure Foundation, Auth, and Profile Onboarding.
-* **Phase 2:** Generative AI Workout generation and interactive GSAP Session Player.
-* **Phase 3:** Real-time WebAssembly Computer Vision rep counting and squat tracking.
-* **Phase 4:** Python AI coaching engine delivering post-workout feedback.
-* **Phase 5:** Adaptive fitness loop modifying difficulty based on session history.
-* **Phase 6:** Gamified dashboard with streaks, RPG leveling, and achievements.
+
+## Security
+
+- All user tables are protected by RLS; `exercises` is read-only to authenticated
+  users and writable only by the service role.
+- **The AI service verifies the Supabase JWT** (`services/ai/security.py`). Next.js
+  forwards the caller's access token on every request. It fails closed: if
+  `REQUIRE_AUTH` is on without a configured secret, it returns 500 rather than
+  serving traffic unauthenticated.
+- Gemini and Gmail credentials are server side only.
+
+## Deliberate design decisions
+
+- **No `gamification` table.** XP, levels, streaks and achievements are pure
+  functions of `workout_sessions`, derived at read time in
+  `src/lib/dashboard/gamification.ts` so they cannot drift out of sync with the
+  underlying data. `progress` *is* a table, because body metrics over time are
+  genuine history that cannot be recomputed.
+- **Three fallback layers.** Gemini → deterministic Python → local TypeScript.
+  A plan is always produced; `generator` on each row records which path ran.
+
+## What still needs doing
+
+- **Demo media is not uploaded.** `seed-exercises.sql` references paths in a
+  public `exercise-media` Supabase Storage bucket that must be created and
+  populated. Until then the UI falls back to written coaching cues — functional,
+  but the demonstrations `plan.md` calls for are not yet there.
+- **No automated test suite.** The vision analyzers and generators were verified
+  with synthetic-input scripts during development, but nothing is checked in.
+- Gemini output quality has not been evaluated against real users.
+
+## Setup
+
+1. Run `supabase/schema.sql`, then `supabase/seed-exercises.sql`.
+2. Copy `.env.example` to `.env.local` and fill in the Supabase values.
+3. Set `GEMINI_API_KEY` and `SUPABASE_JWT_SECRET` on the Python service.
+4. `npm install && npm run dev`; `cd services/ai && uvicorn main:app --reload`.

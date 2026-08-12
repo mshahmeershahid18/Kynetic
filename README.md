@@ -1,89 +1,127 @@
 # Kynetic
 
-Kynetic is an AI-powered fitness coach web app. The current implementation adds Supabase authentication, guided onboarding for a personalized fitness profile/avatar state, AI workout generation, persisted workout plans/session completions, AI coaching feedback, browser rep counting, and a Phase 6 protected dashboard with progress charts and gamification.
+An AI-powered fitness coach. Kynetic builds a personalized profile and 3D avatar,
+generates workouts with Google Gemini, coaches simple exercises live through your
+webcam, checks your form from uploaded video, and adapts future sessions to how
+your last ones actually went.
 
-## What is included
+## Architecture
 
-- Next.js 14 App Router project with TypeScript and Tailwind CSS.
-- System-aware dark/light themes with `next-themes`.
-- Supabase Auth session handling with SSR cookies.
-- Email/password signup and login.
-- Google OAuth sign-in route using Supabase Auth.
-- Password reset request flow through Supabase.
-- Protected `/onboarding` route that collects goals, body metrics, experience, limitations, equipment, and preferences.
-- `profiles`, `workout_plans`, and `workout_sessions` SQL with Row Level Security policies in `supabase/schema.sql`.
-- FastAPI `/generate` endpoint that returns strict workout-plan JSON from profile data.
-- Server-side workout generation flow that uses goal, fitness level, experience, equipment, limitations, and available time.
-- Fallback TypeScript workout generator so the dashboard remains usable if the local Python service is offline.
-- Protected `/dashboard` route with profile avatar state, headline fitness stats, generated workout cards, saved plan history, workout history, 7-day progress charts, XP, levels, streaks, achievements, and AI history insights.
-- Protected `/workouts/[planId]` route to view a generated plan and mark a session complete.
-- Protected `/workouts/[planId]/play` guided session player with exercise/set progression, rest timer, elapsed time, perceived difficulty capture, and saved session summaries.
-- Browser-only MediaPipe Tasks Vision pose tracker for squat/lunge-style movements with webcam skeleton overlay, rep counting, depth/form scoring, and compact metrics persisted in `workout_sessions.session_data`.
+Three parts:
+
+- **Next.js app** — the entire user-facing surface. Talks to Supabase directly
+  for anything user-owned, protected by Row Level Security.
+- **Supabase** — Postgres, Auth (JWT + Google OAuth), Storage for exercise demo
+  media, and RLS for per-user isolation.
+- **Python service** (`services/ai`) — FastAPI with two endpoints, `generate` and
+  `feedback`, both Gemini-backed and both requiring a valid Supabase JWT.
+
+**Computer vision runs in the browser**, not in Python. MediaPipe Pose Landmarker
+detects landmarks on the client and the rep counting and form scoring run in
+TypeScript. Only the numeric summary is ever persisted.
+
+## Features
+
+### AI workout generation
+Gemini receives your goal, experience, equipment, limitations, available time,
+and recent performance, plus the full exercise library, and returns a structured
+plan. Every plan is **re-validated server side** against the library, so a
+hallucinated or equipment-inappropriate exercise cannot reach you.
+
+Three fallback layers guarantee you always get a plan: Gemini → deterministic
+Python engine → local TypeScript generator. The `generator` column records which
+one ran.
+
+### 3D avatar
+A greyscale humanoid built with Three.js. Two continuous parameters drive it —
+body mass from BMI, muscularity from experience level — so the figure changes
+gradually as your profile changes rather than snapping between tiers. Auto-rotates,
+and can be dragged to orbit.
+
+### Live guidance (simple exercises only)
+Squats, push-ups, lunges, and glute bridges get real-time camera coaching: a
+skeleton overlay, automatic rep counting, a depth bar, and spoken-style cues
+("Lift your chest — you are leaning too far forward").
+
+**This is deliberately limited.** Loaded and complex lifts — deadlifts, presses,
+weighted work — get no live tracking, because a single webcam cannot judge them
+safely. Those exercises show their demo and are logged manually, and the UI says
+why.
+
+### Video form check
+Would rather film a set than run a live session? Upload a clip at `/form-check`.
+It is decoded and analysed **entirely in your browser** using the same analyzers
+the live coach uses — the video never leaves your device. Only the rep count and
+form summary are saved.
+
+### Adaptive coaching
+After each session, Gemini reviews your completion rate, camera form data, and
+recent history, and returns specific feedback. Completion rate and form scores
+feed back into difficulty. Hitting 5 / 15 / 40 completed sessions raises your
+experience level, which immediately changes your avatar.
 
 ## Getting started
 
 ```bash
 npm install
-cp .env.example .env.local
+cp .env.example .env.local   # fill in your Supabase values
 npm run dev
 ```
 
 Open http://localhost:3000.
 
-## Environment variables
-
-Copy `.env.example` to `.env.local` and fill in values:
-
-```bash
-NEXT_PUBLIC_SITE_URL=http://localhost:3000
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
-AI_SERVICE_URL=http://localhost:8000
-```
-
-`/auth`, `/onboarding`, and `/dashboard` require Supabase values. The landing page still renders without them.
-
-## Supabase setup
+### Supabase setup
 
 1. Create a Supabase project.
-2. In the SQL editor, run `supabase/schema.sql` to create the profile, workout, and AI feedback tables with RLS policies. If your project already has the profile schema from an earlier phase, you can run `supabase/workouts.sql` for only the workout tables/policies and `supabase/ai-feedback.sql` for coaching feedback persistence.
-3. In Auth settings, enable email/password authentication.
-4. To use Google OAuth, enable the Google provider and set the redirect URL to:
+2. In the SQL editor run **`supabase/schema.sql`**, then **`supabase/seed-exercises.sql`**.
+3. Enable email/password auth. For Google OAuth, enable the provider and set the
+   redirect URL to `http://localhost:3000/auth/callback` (add your production URL
+   too, and set `NEXT_PUBLIC_SITE_URL`).
+4. Optional but recommended: create a **public** Storage bucket named
+   `exercise-media` and upload the demo clips referenced by the seed file. Until
+   you do, exercises fall back to written coaching cues.
 
-```text
-http://localhost:3000/auth/callback
-```
-
-For production, also add your deployed site callback URL and set `NEXT_PUBLIC_SITE_URL` accordingly.
-
-## Run the FastAPI AI service
+### Run the AI service
 
 ```bash
 cd services/ai
 python -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+
+export GEMINI_API_KEY=...          # omit to use the deterministic engine
+export REQUIRE_AUTH=false          # local only; see below
+
 uvicorn main:app --reload --port 8000
 ```
 
 Health check: http://localhost:8000/health
 
-Generate endpoint: `POST http://localhost:8000/generate` with a profile snapshot. The Next.js app calls this endpoint from a server action and persists the returned plan in Supabase.
+See [services/ai/README.md](services/ai/README.md) for full configuration.
 
-## Guided workout and rep counting notes
+## Security
 
-The play route uses `@mediapipe/tasks-vision` dynamically on the client. Webcam frames never leave the browser; only summary fields such as `rep_count`, `average_depth`, `form_score`, form warnings, set logs, elapsed time, and perceived difficulty are sent to the existing session completion action. MediaPipe model/WASM files are loaded from the official CDN, so rep counting requires network access and camera permission. Non squat/lunge-style exercises remain manually advanced.
+- Every user table is protected by RLS. `exercises` is read-only to authenticated
+  users and writable only by the service role.
+- **The AI service verifies the Supabase JWT on every request.** Next.js forwards
+  the caller's access token. Auth fails closed: if `REQUIRE_AUTH` is on without a
+  configured secret, the service returns 500 rather than serving traffic openly.
+  Set `SUPABASE_JWT_SECRET` in production.
+- Gemini and Gmail credentials live server side only, never in client code.
+- Webcam frames and uploaded videos are processed in the browser and never
+  transmitted.
 
-## Useful scripts
+## Scripts
 
 ```bash
-npm run dev        # Start the Next.js dev server
-npm run build      # Build the production Next.js app
-npm run start      # Start the production server after build
-npm run lint       # Run Next.js ESLint
-npm run typecheck  # Run TypeScript without emitting files
+npm run dev        # Dev server
+npm run build      # Production build
+npm run start      # Serve the production build
+npm run lint       # ESLint
+npm run typecheck  # tsc --noEmit
 ```
 
-## Roadmap alignment
+## Project status
 
-This repository now implements the auth/profile foundation, AI workout generation, AI coaching feedback, the guided workout player with browser-based MediaPipe rep counting, and the Phase 6 dashboard/gamification layer. Full exercise media demos and deeper adaptive progression rules remain for later phases described in `plan.md`.
+See [status.md](status.md) for a phase-by-phase status, the design decisions
+behind it, and the known gaps.

@@ -18,9 +18,14 @@ export async function SiteHeader() {
             Features
           </Link>
           {user && (
-            <Link className="transition hover:text-foreground" href="/dashboard">
-              Dashboard
-            </Link>
+            <>
+              <Link className="transition hover:text-foreground" href="/dashboard">
+                Dashboard
+              </Link>
+              <Link className="transition hover:text-foreground" href="/form-check">
+                Form check
+              </Link>
+            </>
           )}
         </nav>
         <div className="flex items-center gap-3">
