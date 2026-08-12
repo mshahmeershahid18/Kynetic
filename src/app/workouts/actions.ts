@@ -4,7 +4,9 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { generateCoachingFeedback, generateWorkoutPlan } from "@/lib/ai-service";
-import type { FitnessProfile } from "@/lib/profiles/types";
+import { fetchExerciseLibrary } from "@/lib/exercises/library";
+import { calculateBmi, resolveAvatarState } from "@/lib/profiles/avatar";
+import type { ExperienceLevel, FitnessProfile } from "@/lib/profiles/types";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { toWorkoutProfileSnapshot, type WorkoutPlanRecord, type WorkoutSessionRecord, type WorkoutSessionSummary } from "@/lib/workouts/types";
 
@@ -19,6 +21,12 @@ async function requireUserAndProfile() {
 
   if (userError || !user) redirect("/auth/login?message=Please%20sign%20in");
 
+  // The AI service verifies this token, so it must travel with every call.
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const accessToken = session?.access_token ?? null;
+
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("*")
@@ -27,12 +35,13 @@ async function requireUserAndProfile() {
 
   if (profileError || !profile?.onboarding_completed) redirect("/onboarding");
 
-  return { supabase, user, profile: profile as FitnessProfile };
+  return { supabase, user, accessToken, profile: profile as FitnessProfile };
 }
 
 export async function generateWorkoutAction() {
-  const { supabase, user, profile } = await requireUserAndProfile();
+  const { supabase, user, accessToken, profile } = await requireUserAndProfile();
   const snapshot = toWorkoutProfileSnapshot(profile);
+  const library = await fetchExerciseLibrary();
 
   const { data: recentSessions } = await supabase
     .from("workout_sessions")
@@ -54,7 +63,12 @@ export async function generateWorkoutAction() {
     recent_feedback: recentFeedback ?? [],
   };
 
-  const { plan, source } = await generateWorkoutPlan(snapshot, context);
+  const { plan, source } = await generateWorkoutPlan({
+    profile: snapshot,
+    library,
+    context,
+    accessToken,
+  });
 
   const { data, error } = await supabase
     .from("workout_plans")
@@ -66,6 +80,7 @@ export async function generateWorkoutAction() {
       difficulty: plan.difficulty,
       goal: plan.goal,
       plan,
+      generator: source,
       source_profile_snapshot: { ...snapshot, generation_source: source, context_used: true },
     })
     .select("id")
@@ -80,7 +95,7 @@ export async function generateWorkoutAction() {
 }
 
 export async function completeWorkoutAction(formData: FormData) {
-  const { supabase, user, profile } = await requireUserAndProfile();
+  const { supabase, user, accessToken, profile } = await requireUserAndProfile();
   const planId = String(formData.get("plan_id") ?? "");
   const duration = Number(formData.get("duration_minutes") ?? 0);
   const rawSessionData = formData.get("session_data");
@@ -152,7 +167,7 @@ export async function completeWorkoutAction(formData: FormData) {
     profile,
   };
 
-  const { feedback, source } = await generateCoachingFeedback(payload);
+  const { feedback, source } = await generateCoachingFeedback(payload, accessToken);
   const { error: feedbackError } = await supabase.from("ai_feedback").insert({
     user_id: user.id,
     session_id: insertedSession.id,
@@ -160,6 +175,7 @@ export async function completeWorkoutAction(formData: FormData) {
     feedback,
     feedback_text: feedback.summary,
     suggestions: feedback.suggestions,
+    generator: source,
     source_payload: { ...payload, feedback_source: source },
   });
 
@@ -167,7 +183,7 @@ export async function completeWorkoutAction(formData: FormData) {
     redirect(`/dashboard?message=${encodeURIComponent(`Workout completed, but feedback could not be saved: ${feedbackError.message}`)}`);
   }
 
-  // Phase 5: Avatar Auto-leveling
+  // Training volume raises the experience level, which the 3D avatar reads.
   const { count } = await supabase
     .from("workout_sessions")
     .select("*", { count: "exact", head: true })
@@ -175,28 +191,37 @@ export async function completeWorkoutAction(formData: FormData) {
     .eq("status", "completed");
 
   const completedCount = count ?? 0;
-  let newExperience = profile.experience_level;
+  const current = profile.experience_level;
+  let newExperience: ExperienceLevel | null = current;
 
-  if (completedCount >= 15 && (!profile.experience_level || profile.experience_level === "none" || profile.experience_level === "beginner")) {
+  if (completedCount >= 40 && current !== "experienced") {
+    newExperience = "experienced";
+  } else if (completedCount >= 15 && (!current || current === "none" || current === "beginner")) {
     newExperience = "intermediate";
-  } else if (completedCount >= 5 && (!profile.experience_level || profile.experience_level === "none")) {
+  } else if (completedCount >= 5 && (!current || current === "none")) {
     newExperience = "beginner";
   }
 
-  if (newExperience !== profile.experience_level) {
-    // Re-calculate avatar_state
-    let bmiBucket = "normal";
-    const bmi = profile.bmi ?? 22;
-    if (bmi < 18.5) bmiBucket = "underweight";
-    else if (bmi >= 25 && bmi < 30) bmiBucket = "overweight";
-    else if (bmi >= 30) bmiBucket = "obese";
-    
-    const newAvatarState = `${bmiBucket}-${newExperience || "none"}`;
+  if (newExperience !== current) {
+    // Single source of truth for bucket naming, shared with onboarding and the
+    // avatar renderer, so the three can never disagree.
+    const bmi = profile.bmi ?? calculateBmi(profile.height_cm ?? 0, profile.weight_kg ?? 0);
+    const avatarState = resolveAvatarState(bmi, newExperience);
 
     await supabase
       .from("profiles")
-      .update({ experience_level: newExperience, avatar_state: newAvatarState })
+      .update({ experience_level: newExperience, avatar_state: avatarState })
       .eq("id", user.id);
+
+    // Snapshot the change so progress over time is queryable.
+    await supabase.from("progress").insert({
+      user_id: user.id,
+      weight_kg: profile.weight_kg,
+      bmi,
+      experience_level: newExperience,
+      avatar_state: avatarState,
+      note: `Reached ${completedCount} completed sessions`,
+    });
   }
 
   revalidatePath("/dashboard");

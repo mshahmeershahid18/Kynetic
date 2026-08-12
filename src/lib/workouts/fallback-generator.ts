@@ -128,4 +128,5 @@ export function generateFallbackWorkout(
       "Chest and lat stretch, 30 seconds per side",
     ],
     coaching_notes: notes,
- 
+  };
+}
