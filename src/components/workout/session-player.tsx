@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, useTransition, type ReactNode } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, CheckCircle2, ChevronRight, Clock, Dumbbell, Loader2, Pause, Play, RotateCcw, Timer } from 'lucide-react'
+import { PoseTracker } from './pose-tracker'
 
 import type { WorkoutExercise, WorkoutPlanRecord, WorkoutSessionSummary } from '@/lib/workouts/types'
 
@@ -69,6 +70,8 @@ export function SessionPlayer({
   const [restRemaining, setRestRemaining] = useState(0)
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [completedSets, setCompletedSets] = useState<Record<string, number>>({})
+  const [currentReps, setCurrentReps] = useState(0)
+  const [formFeedback, setFormFeedback] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
   const current = steps[currentIndex]
@@ -100,6 +103,8 @@ export function SessionPlayer({
     setRestRemaining(0)
     setElapsedSeconds(0)
     setCompletedSets({})
+    setCurrentReps(0)
+    setFormFeedback(null)
   }
 
   function advanceAfterSet() {
@@ -110,6 +115,8 @@ export function SessionPlayer({
       [String(currentIndex)]: (completedSets[String(currentIndex)] ?? 0) + 1,
     }
     setCompletedSets(nextCompletedSets)
+    setCurrentReps(0)
+    setFormFeedback(null)
 
     const hasMoreSets = currentSet < current.exercise.sets
     const hasMoreExercises = currentIndex < steps.length - 1
@@ -131,6 +138,19 @@ export function SessionPlayer({
 
     setPhase('complete')
     saveSession(nextCompletedSets)
+  }
+
+  function handleRepCompleted(repsCompleted: number, avgDepth: number) {
+    setCurrentReps(repsCompleted)
+    const targetReps = parseInt(current?.exercise.reps || "0")
+    if (targetReps > 0 && repsCompleted >= targetReps) {
+      // Small delay before advancing so the user can register they finished
+      setTimeout(() => advanceAfterSet(), 1500)
+    }
+  }
+
+  function handleFormFeedback(message: string | null) {
+    setFormFeedback(message)
   }
 
   function saveSession(setsSnapshot: Record<string, number> = completedSets) {
@@ -228,6 +248,31 @@ export function SessionPlayer({
                     </p>
                   ))}
                 </div>
+
+                {phase === 'exercise' && (
+                  <div className="mt-8 border border-border rounded-[2.5rem] p-4 bg-muted/30">
+                    <div className="mb-4 flex items-center justify-between px-2">
+                      <h3 className="font-black">Live AI Tracker</h3>
+                      <div className="flex gap-4">
+                        <div className="text-right">
+                          <p className="text-xs font-bold text-muted-foreground uppercase">Live Reps</p>
+                          <p className="text-2xl font-black text-primary">{currentReps}</p>
+                        </div>
+                      </div>
+                    </div>
+                    <PoseTracker 
+                      exerciseName={current.exercise.name} 
+                      targetReps={parseInt(current.exercise.reps || "0")} 
+                      onRepCompleted={handleRepCompleted} 
+                      onFormFeedback={handleFormFeedback} 
+                    />
+                    {formFeedback && (
+                      <div className="mt-4 rounded-2xl bg-primary/20 p-4 text-center border border-primary/30">
+                        <p className="font-bold text-primary">{formFeedback}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {phase === 'ready' ? (
                   <button onClick={() => setPhase('exercise')} className="mt-8 inline-flex w-full items-center justify-center gap-2 rounded-full bg-primary px-7 py-4 font-black text-primary-foreground transition hover:scale-[1.01]">
