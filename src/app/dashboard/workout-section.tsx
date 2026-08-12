@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { generateWorkoutAction } from './actions'
+import { generateWorkoutAction } from '@/app/workouts/actions'
 import { Loader2, Plus, Play, Calendar } from 'lucide-react'
 
 export function WorkoutSection({ plans }: { plans: any[] }) {
@@ -11,12 +11,10 @@ export function WorkoutSection({ plans }: { plans: any[] }) {
 
   async function handleGenerate() {
     setIsLoading(true)
-    const result = await generateWorkoutAction()
-    if (result?.planId) {
-      router.push(`/workout/${result.planId}`)
-    } else {
+    try {
+      await generateWorkoutAction()
+    } finally {
       setIsLoading(false)
-      alert(result?.error || "Failed to generate plan")
     }
   }
 
@@ -54,7 +52,7 @@ export function WorkoutSection({ plans }: { plans: any[] }) {
                 </div>
               </div>
               <button 
-                onClick={() => router.push(`/workout/${plan.id}`)}
+                onClick={() => router.push(`/workouts/${plan.id}`)}
                 className="flex h-10 w-10 items-center justify-center rounded-full bg-secondary text-secondary-foreground transition hover:scale-105"
               >
                 <Play className="h-4 w-4 ml-1" />

@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { generateWorkoutPlan } from "@/lib/ai-service";
 import type { FitnessProfile } from "@/lib/profiles/types";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { toWorkoutProfileSnapshot } from "@/lib/workouts/types";
+import { toWorkoutProfileSnapshot, type WorkoutSessionSummary } from "@/lib/workouts/types";
 
 async function requireUserAndProfile() {
   const supabase = createServerSupabaseClient();
@@ -62,15 +62,34 @@ export async function completeWorkoutAction(formData: FormData) {
   const { supabase, user } = await requireUserAndProfile();
   const planId = String(formData.get("plan_id") ?? "");
   const duration = Number(formData.get("duration_minutes") ?? 0);
+  const rawSessionData = formData.get("session_data");
+  let sessionData: WorkoutSessionSummary = { completed_from: "workout_plan_page" };
+
+  if (typeof rawSessionData === "string" && rawSessionData) {
+    try {
+      sessionData = JSON.parse(rawSessionData) as WorkoutSessionSummary;
+    } catch {
+      sessionData = { completed_from: "guided_session_player" };
+    }
+  }
 
   if (!planId) redirect("/dashboard?message=Missing%20workout%20plan");
+
+  const { data: planOwner } = await supabase
+    .from("workout_plans")
+    .select("id")
+    .eq("id", planId)
+    .eq("user_id", user.id)
+    .single();
+
+  if (!planOwner) redirect("/dashboard?message=Workout%20not%20found");
 
   const { error } = await supabase.from("workout_sessions").insert({
     user_id: user.id,
     workout_plan_id: planId,
     status: "completed",
     duration_minutes: Number.isFinite(duration) && duration > 0 ? duration : null,
-    session_data: { completed_from: "workout_plan_page" },
+    session_data: sessionData,
     completed_at: new Date().toISOString(),
   });
 

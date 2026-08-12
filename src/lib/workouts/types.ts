@@ -41,13 +41,32 @@ export type WorkoutPlanRecord = {
   created_at: string;
 };
 
+export type WorkoutSessionExerciseLog = {
+  name: string;
+  block: string;
+  target_sets: number;
+  completed_sets: number;
+  target_reps: string;
+  rest_seconds: number;
+};
+
+export type WorkoutSessionSummary = {
+  completed_from: "workout_plan_page" | "guided_session_player";
+  plan_title?: string;
+  total_exercises?: number;
+  total_sets?: number;
+  completed_sets?: number;
+  elapsed_seconds?: number;
+  exercise_log?: WorkoutSessionExerciseLog[];
+};
+
 export type WorkoutSessionRecord = {
   id: string;
   user_id: string;
   workout_plan_id: string;
   status: "completed" | "skipped";
   duration_minutes: number | null;
-  session_data: Record<string, unknown> | null;
+  session_data: WorkoutSessionSummary | null;
   completed_at: string | null;
   created_at: string;
 };

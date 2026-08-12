@@ -17,6 +17,7 @@ Kynetic is an AI-powered fitness coach web app. The current implementation adds 
 - Fallback TypeScript workout generator so the dashboard remains usable if the local Python service is offline.
 - Protected `/dashboard` route with profile avatar state, generated workout cards, completion counts, and saved plan history.
 - Protected `/workouts/[planId]` route to view a generated plan and mark a session complete.
+- Protected `/workouts/[planId]/play` guided session player with exercise/set progression, rest timer, elapsed time, progress tracking, and saved session summaries.
 
 ## Getting started
 
@@ -80,4 +81,4 @@ npm run typecheck  # Run TypeScript without emitting files
 
 ## Roadmap alignment
 
-This repository now implements the auth/profile foundation and the AI workout generation phase requested next from the roadmap. Full exercise media demos, guided workout player timers, browser rep counting, and adaptive coaching remain for later phases described in `plan.md`.
+This repository now implements the auth/profile foundation plus the AI workout generation and guided workout player loop requested from the roadmap. Full exercise media demos, browser rep counting, and adaptive coaching remain for later phases described in `plan.md`.
