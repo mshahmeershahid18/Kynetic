@@ -132,7 +132,7 @@ export default function OnboardingPage() {
           <div className="min-h-[300px]">
             {step === 1 && (
               <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-right-8 duration-500">
-                <h2 className="text-3xl font-black tracking-tight">Let's build your profile</h2>
+                <h2 className="text-3xl font-black tracking-tight">Let&apos;s build your profile</h2>
                 <div>
                   <label className="mb-2 block font-bold">Age</label>
                   <input type="number" required value={data.age} onChange={e => updateData({ age: e.target.value })} className="w-full rounded-2xl border border-border bg-background px-4 py-3 focus:border-primary focus:outline-none" placeholder="e.g. 25" />
@@ -217,7 +217,7 @@ export default function OnboardingPage() {
                   <ArrowRight className="h-10 w-10" />
                 </div>
                 <h2 className="text-3xl font-black tracking-tight">Ready to generate your avatar?</h2>
-                <p className="text-muted-foreground">We've collected all the data we need. Let's head to your dashboard.</p>
+                <p className="text-muted-foreground">We&apos;ve collected all the data we need. Let&apos;s head to your dashboard.</p>
               </div>
             )}
           </div>

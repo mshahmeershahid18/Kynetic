@@ -12,6 +12,9 @@ export const metadata = {
   description: 'Upload a video of your set and get an automated rep count and form analysis.',
 }
 
+// Per-user, auth-gated data — never prerender or cache this across users.
+export const dynamic = 'force-dynamic'
+
 export default async function FormCheckPage() {
   const supabase = createServerSupabaseClient()
   if (!supabase) return null

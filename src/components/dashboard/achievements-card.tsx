@@ -1,45 +1,59 @@
-import { Award, Lock } from 'lucide-react'
+import { Check, Lock } from 'lucide-react'
+
 import type { DashboardAchievement } from '@/lib/dashboard/gamification'
 
 export function AchievementsCard({ achievements }: { achievements: DashboardAchievement[] }) {
-  const unlockedCount = achievements.filter((achievement) => achievement.unlocked).length
+  const unlocked = achievements.filter((achievement) => achievement.unlocked).length
 
   return (
-    <section className="rounded-[2.5rem] border border-border bg-card p-8 shadow-sm">
-      <div className="mb-6 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
-        <div>
-          <h2 className="text-2xl font-black tracking-tight">Achievements</h2>
-          <p className="mt-2 text-sm text-muted-foreground">Reward badges for consistency, training volume, rep tracking, and AI coach usage.</p>
-        </div>
-        <span className="rounded-full bg-primary/10 px-4 py-2 text-sm font-black text-primary">
-          {unlockedCount}/{achievements.length} unlocked
+    <section className="rounded-2xl border border-border bg-card">
+      <header className="flex items-center justify-between gap-3 border-b border-border px-6 py-4">
+        <h2 className="text-sm font-semibold">Achievements</h2>
+        <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground tabular-nums">
+          {unlocked}/{achievements.length}
         </span>
-      </div>
+      </header>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        {achievements.map((achievement) => (
-          <article key={achievement.id} className={`rounded-[2rem] border p-5 transition ${achievement.unlocked ? 'border-primary/40 bg-primary/5' : 'border-border bg-background'}`}>
-            <div className="flex items-start gap-4">
-              <div className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl ${achievement.unlocked ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
-                {achievement.unlocked ? <Award className="h-6 w-6" /> : <Lock className="h-5 w-5" />}
+      <ul className="grid gap-px bg-border sm:grid-cols-2">
+        {achievements.map((achievement) => {
+          const percent = achievement.target
+            ? Math.min(100, Math.round((achievement.progress / achievement.target) * 100))
+            : 0
+
+          return (
+            <li key={achievement.id} className="bg-card px-5 py-4">
+              <div className="flex items-start gap-3">
+                <div
+                  className={`mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg ${
+                    achievement.unlocked ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
+                  }`}
+                >
+                  {achievement.unlocked ? <Check className="h-3.5 w-3.5" /> : <Lock className="h-3 w-3" />}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium">{achievement.title}</p>
+                  <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                    {achievement.description}
+                  </p>
+                  {!achievement.unlocked ? (
+                    <div className="mt-2.5">
+                      <div className="h-1 overflow-hidden rounded-full bg-muted">
+                        <div
+                          className="h-full rounded-full bg-muted-foreground/40"
+                          style={{ width: `${percent}%` }}
+                        />
+                      </div>
+                      <p className="mt-1.5 text-[11px] text-muted-foreground tabular-nums">
+                        {achievement.progress} / {achievement.target}
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
               </div>
-              <div className="min-w-0 flex-1">
-                <h3 className="font-black">{achievement.title}</h3>
-                <p className="mt-1 text-sm leading-5 text-muted-foreground">{achievement.description}</p>
-              </div>
-            </div>
-            <div className="mt-5">
-              <div className="mb-2 flex justify-between text-xs font-bold text-muted-foreground">
-                <span>Progress</span>
-                <span>{achievement.progress}/{achievement.target}</span>
-              </div>
-              <div className="h-2 overflow-hidden rounded-full bg-muted">
-                <div className="h-full rounded-full bg-primary" style={{ width: `${Math.round((achievement.progress / achievement.target) * 100)}%` }} />
-              </div>
-            </div>
-          </article>
-        ))}
-      </div>
+            </li>
+          )
+        })}
+      </ul>
     </section>
   )
 }

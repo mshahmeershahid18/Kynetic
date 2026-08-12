@@ -3,6 +3,8 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { PlayClient } from "./play-client";
 import type { WorkoutPlanRecord } from "@/lib/workouts/types";
 
+export const dynamic = "force-dynamic";
+
 export default async function PlayWorkoutPage({ params }: { params: { planId: string } }) {
   const supabase = createServerSupabaseClient();
   if (!supabase) return null;
