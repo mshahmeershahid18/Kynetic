@@ -1,64 +1,131 @@
-import type { GeneratedWorkoutPlan, WorkoutExercise, WorkoutProfileSnapshot } from "@/lib/workouts/types";
+import { BUILTIN_LIBRARY } from "@/lib/exercises/library";
+import type { ExerciseLibraryEntry, GeneratedWorkoutPlan, WorkoutExercise, WorkoutProfileSnapshot } from "@/lib/workouts/types";
 
-const strengthPool: WorkoutExercise[] = [
-  { name: "Goblet squat", muscle_group: "Lower body", equipment: "dumbbells", sets: 3, reps: "8-10", rest_seconds: 75, instructions: ["Hold one weight at chest height.", "Sit hips back and keep knees tracking over toes.", "Drive through the floor to stand tall."] },
-  { name: "Push-up", muscle_group: "Chest", equipment: "bodyweight", sets: 3, reps: "6-12", rest_seconds: 60, instructions: ["Set hands under shoulders and brace your core.", "Lower as one unit until chest nears the floor.", "Press back up without flaring elbows wide."] },
-  { name: "Bent-over row", muscle_group: "Back", equipment: "dumbbells", sets: 3, reps: "10-12", rest_seconds: 60, instructions: ["Hinge at the hips with a long spine.", "Pull weights toward your lower ribs.", "Control the lowering phase."] },
-  { name: "Reverse lunge", muscle_group: "Lower body", equipment: "bodyweight", sets: 2, reps: "8 each side", rest_seconds: 60, instructions: ["Step one foot back into a split stance.", "Lower until both knees bend comfortably.", "Push through the front foot to return."] },
-  { name: "Plank", muscle_group: "Core", equipment: "bodyweight", sets: 3, reps: "30-45 sec", rest_seconds: 45, instructions: ["Stack elbows under shoulders.", "Squeeze glutes and keep ribs tucked.", "Breathe steadily without sagging."] },
-];
+/**
+ * Client-side safety net used when the Python service cannot be reached at all.
+ * It mirrors `services/ai/fallback_generator.py` so a user always gets the same
+ * shape of plan, drawn from the same library, regardless of which layer failed.
+ */
 
-const endurancePool: WorkoutExercise[] = [
-  { name: "Marching high knees", muscle_group: "Conditioning", equipment: "bodyweight", sets: 3, reps: "45 sec", rest_seconds: 30, instructions: ["Stand tall and alternate knee drives.", "Pump arms naturally.", "Keep the pace brisk but controlled."] },
-  { name: "Step-back squat", muscle_group: "Lower body", equipment: "bodyweight", sets: 3, reps: "12-15", rest_seconds: 45, instructions: ["Squat to a comfortable depth.", "Step one foot back after each rep.", "Alternate sides while keeping the chest proud."] },
-  { name: "Mountain climber", muscle_group: "Core", equipment: "bodyweight", sets: 3, reps: "30 sec", rest_seconds: 30, instructions: ["Start in a strong plank.", "Drive knees toward the chest one at a time.", "Keep hips steady."] },
-  { name: "Glute bridge", muscle_group: "Posterior chain", equipment: "bodyweight", sets: 3, reps: "12-15", rest_seconds: 45, instructions: ["Lie on your back with feet planted.", "Lift hips by squeezing glutes.", "Pause at the top, then lower slowly."] },
-];
+const REP_SCHEMES = {
+  strength: { sets: 4, reps: "5-6", rest: 120 },
+  muscle: { sets: 3, reps: "8-12", rest: 75 },
+  endurance: { sets: 3, reps: "15-20", rest: 45 },
+  general: { sets: 3, reps: "10-12", rest: 60 },
+} as const;
 
-function normalized(value: string | null | undefined) {
-  return (value ?? "").toLowerCase();
+const MUSCLE_ORDER = ["Lower body", "Chest", "Back", "Shoulders", "Glutes", "Hamstrings", "Core", "Conditioning"];
+
+function goalFamily(goal: string | null): keyof typeof REP_SCHEMES {
+  const text = (goal ?? "").toLowerCase();
+  if (text.includes("strength")) return "strength";
+  if (text.includes("muscle") || text.includes("build")) return "muscle";
+  if (text.includes("endurance") || text.includes("fat") || text.includes("lose")) return "endurance";
+  return "general";
 }
 
-function allowedExercise(exercise: WorkoutExercise, equipment: string[]) {
-  const owned = equipment.map((item) => item.toLowerCase());
-  return exercise.equipment === "bodyweight" || owned.some((item) => exercise.equipment.includes(item) || item.includes(exercise.equipment));
-}
-
-function pickExercises(profile: WorkoutProfileSnapshot) {
-  const goal = normalized(profile.goal);
-  const base = goal.includes("endurance") || goal.includes("fat") ? endurancePool : strengthPool;
-  const available = base.filter((exercise) => allowedExercise(exercise, profile.equipment));
-  const selected = (available.length >= 4 ? available : [...available, ...base.filter((exercise) => exercise.equipment === "bodyweight")]).slice(0, 5);
-  return selected.length ? selected : strengthPool.filter((exercise) => exercise.equipment === "bodyweight").slice(0, 4);
-}
-
-function difficulty(profile: WorkoutProfileSnapshot) {
-  const experience = normalized(profile.experience_level || profile.fitness_level);
-  if (experience.includes("experienced") || experience.includes("athlete") || experience.includes("high")) return "advanced";
-  if (experience.includes("intermediate") || experience.includes("moderate")) return "intermediate";
+function baseDifficulty(profile: WorkoutProfileSnapshot) {
+  const level = `${profile.experience_level ?? ""} ${profile.fitness_level ?? ""}`.toLowerCase();
+  if (/experienced|athlete|high/.test(level)) return "advanced";
+  if (/intermediate|moderate/.test(level)) return "intermediate";
   return "beginner";
 }
 
-export function generateFallbackWorkout(profile: WorkoutProfileSnapshot): GeneratedWorkoutPlan {
+function isAvailable(entry: ExerciseLibraryEntry, equipment: string[]) {
+  const required = entry.equipment.toLowerCase();
+  if (required === "bodyweight") return true;
+  return equipment.some((item) => {
+    const owned = item.toLowerCase();
+    return required.includes(owned) || owned.includes(required);
+  });
+}
+
+/** Conservative keyword screen so stated injuries are respected. */
+function avoidsLimitations(entry: ExerciseLibraryEntry, limitations: string | null) {
+  if (!limitations) return true;
+  const text = limitations.toLowerCase();
+  const group = entry.muscle_group.toLowerCase();
+
+  if (text.includes("knee") && (group === "lower body" || group === "glutes")) return false;
+  if (text.includes("shoulder") && (group === "shoulders" || group === "chest")) return false;
+  if (/back|spine|disc/.test(text) && (group === "back" || group === "hamstrings")) return false;
+  if (text.includes("wrist") && group === "chest") return false;
+  return true;
+}
+
+export function generateFallbackWorkout(
+  profile: WorkoutProfileSnapshot,
+  library: ExerciseLibraryEntry[] = BUILTIN_LIBRARY
+): GeneratedWorkoutPlan {
   const minutes = profile.available_minutes ?? 35;
-  const exercises = pickExercises(profile).map((exercise) => ({
-    ...exercise,
-    sets: difficulty(profile) === "beginner" ? Math.min(exercise.sets, 2) : exercise.sets,
+  const goal = profile.goal ?? "General wellness";
+  const scheme = REP_SCHEMES[goalFamily(profile.goal)];
+  const difficulty = baseDifficulty(profile);
+
+  let candidates = (library.length ? library : BUILTIN_LIBRARY).filter(
+    (entry) => isAvailable(entry, profile.equipment) && avoidsLimitations(entry, profile.limitations)
+  );
+  if (!candidates.length) {
+    candidates = BUILTIN_LIBRARY.filter((entry) => avoidsLimitations(entry, profile.limitations));
+  }
+  if (!candidates.length) candidates = BUILTIN_LIBRARY;
+
+  // One movement per muscle group first, so the session covers the body.
+  const selected: ExerciseLibraryEntry[] = [];
+  const usedGroups = new Set<string>();
+  for (const group of MUSCLE_ORDER) {
+    const match = candidates.find((entry) => entry.muscle_group === group && !usedGroups.has(group));
+    if (match) {
+      selected.push(match);
+      usedGroups.add(group);
+    }
+  }
+  for (const entry of candidates) {
+    if (selected.length >= 5) break;
+    if (!selected.includes(entry)) selected.push(entry);
+  }
+
+  const limit = minutes <= 20 ? 3 : minutes <= 35 ? 4 : 5;
+  const sets = difficulty === "beginner" ? Math.max(2, scheme.sets - 1) : scheme.sets;
+
+  const exercises: WorkoutExercise[] = selected.slice(0, limit).map((entry) => ({
+    slug: entry.slug,
+    name: entry.name,
+    muscle_group: entry.muscle_group,
+    equipment: entry.equipment,
+    sets,
+    reps: scheme.reps,
+    rest_seconds: scheme.rest,
+    instructions: entry.instructions,
+    cues: entry.cues,
+    demo_media_url: entry.demo_media_url,
+    vision_kind: entry.vision_kind,
   }));
 
+  const notes = [
+    "Move with clean form before adding speed or load.",
+    "Stop a set if your technique breaks down rather than grinding it out.",
+  ];
+  if (profile.limitations) {
+    notes.unshift(`Working around your stated limitation: ${profile.limitations}.`);
+  }
+
   return {
-    title: `${profile.goal ?? "Personalized"} session`,
-    summary: `A ${minutes}-minute workout tailored to your goal, level, equipment, and schedule.`,
+    title: `${goal} session`,
+    summary: `A ${minutes}-minute ${difficulty} workout built from your goal, equipment, and available time.`,
     duration_minutes: minutes,
-    difficulty: difficulty(profile),
-    goal: profile.goal ?? "General wellness",
-    warmup: ["3 minutes easy cardio or marching in place", "10 bodyweight good mornings", "10 arm circles each direction"],
-    blocks: [{ name: "Main training block", focus: profile.goal ?? "Full body fitness", exercises }],
-    cooldown: ["Slow nasal breathing for 60 seconds", "Standing quad stretch", "Chest and lat stretch"],
-    coaching_notes: [
-      "Move with clean form before adding speed or load.",
-      profile.limitations ? `Respect this limitation: ${profile.limitations}` : "Stop if pain appears and choose a gentler range of motion.",
-      "Log how the session felt so future workouts can adapt.",
+    difficulty,
+    goal,
+    warmup: [
+      "3 minutes of easy movement to raise your temperature",
+      "10 bodyweight good mornings",
+      "10 arm circles in each direction",
     ],
-  };
-}
+    blocks: [{ name: "Main training block", focus: goal, exercises }],
+    cooldown: [
+      "60 seconds of slow nasal breathing",
+      "Standing quad stretch, 30 seconds per side",
+      "Chest and lat stretch, 30 seconds per side",
+    ],
+    coaching_notes: notes,
+ 
