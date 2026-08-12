@@ -53,42 +53,65 @@ export default function OnboardingPage() {
     if (!supabase) return
 
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+    if (!user) {
+      setIsLoading(false)
+      return
+    }
 
-    // Calculate BMI
-    const h = parseFloat(data.height_cm) / 100
-    const w = parseFloat(data.weight_kg)
-    const bmi = w / (h * h)
-    
-    // Determine avatar state based on BMI and experience
-    let bmiBucket = 'normal'
-    if (bmi < 18.5) bmiBucket = 'underweight'
-    else if (bmi >= 25 && bmi < 30) bmiBucket = 'overweight'
-    else if (bmi >= 30) bmiBucket = 'obese'
+    try {
+      // Calculate BMI
+      const h = parseFloat(data.height_cm) / 100
+      const w = parseFloat(data.weight_kg)
+      const bmi = w / (h * h)
+      
+      // Determine avatar state based on BMI and experience
+      let bmiBucket = 'normal'
+      if (bmi < 18.5) bmiBucket = 'underweight'
+      else if (bmi >= 25 && bmi < 30) bmiBucket = 'overweight'
+      else if (bmi >= 30) bmiBucket = 'obese'
 
-    const avatarState = `${bmiBucket}-${data.experience_level}`
+      const avatarState = `${bmiBucket}-${data.experience_level}`
 
-    await supabase.from('profiles').update({
-      age: parseInt(data.age),
-      gender: data.gender,
-      height_cm: parseFloat(data.height_cm),
-      weight_kg: parseFloat(data.weight_kg),
-      fitness_level: data.fitness_level,
-      goal: data.goal,
-      equipment: data.equipment,
-      experience_level: data.experience_level,
-      bmi: parseFloat(bmi.toFixed(1)),
-      avatar_state: avatarState
-    }).eq('id', user.id)
+      const { error } = await supabase.from('profiles').upsert({
+        id: user.id,
+        email: user.email,
+        full_name: user.user_metadata?.full_name || null,
+        age: parseInt(data.age),
+        gender: data.gender,
+        height_cm: parseFloat(data.height_cm),
+        weight_kg: parseFloat(data.weight_kg),
+        fitness_level: data.fitness_level,
+        goal: data.goal,
+        equipment: data.equipment,
+        experience_level: data.experience_level,
+        bmi: parseFloat(bmi.toFixed(1)),
+        avatar_state: avatarState,
+        onboarding_completed: true
+      })
 
-    // Send welcome email via our route handler
-    await fetch('/api/email/welcome', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: user.email })
-    })
+      if (error) {
+        console.error("Failed to save profile", error)
+        alert("Failed to save profile: " + error.message)
+        setIsLoading(false)
+        return
+      }
 
-    router.push('/dashboard')
+      // Send welcome email via our route handler
+      try {
+        await fetch('/api/email/welcome', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: user.email })
+        })
+      } catch (err) {
+        console.warn("Welcome email skipped/failed", err)
+      }
+
+      router.push('/dashboard')
+    } catch (err) {
+      console.error(err)
+      setIsLoading(false)
+    }
   }
 
   return (
