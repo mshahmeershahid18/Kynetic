@@ -25,10 +25,10 @@ export default function OnboardingPage() {
   const [isLoading, setIsLoading] = useState(false)
   
   const [data, setData] = useState<OnboardingData>({
-    age: '',
+    age: '25',
     gender: 'prefer-not-to-say',
-    height_cm: '',
-    weight_kg: '',
+    height_cm: '175',
+    weight_kg: '70',
     fitness_level: 'beginner',
     goal: 'build-muscle',
     equipment: [],
@@ -72,22 +72,26 @@ export default function OnboardingPage() {
 
       const avatarState = `${bmiBucket}-${data.experience_level}`
 
+      const ageVal = parseInt(data.age);
+      const heightVal = parseFloat(data.height_cm);
+      const weightVal = parseFloat(data.weight_kg);
+
       const { error } = await supabase.from('profiles').upsert({
         id: user.id,
         email: user.email,
         full_name: user.user_metadata?.full_name || null,
-        age: parseInt(data.age),
-        gender: data.gender,
-        height_cm: parseFloat(data.height_cm),
-        weight_kg: parseFloat(data.weight_kg),
-        fitness_level: data.fitness_level,
-        goal: data.goal,
+        age: isNaN(ageVal) ? 25 : ageVal,
+        gender: data.gender || 'prefer-not-to-say',
+        height_cm: isNaN(heightVal) ? 175 : heightVal,
+        weight_kg: isNaN(weightVal) ? 70 : weightVal,
+        fitness_level: data.fitness_level || 'beginner',
+        goal: data.goal || 'build-muscle',
         equipment: data.equipment,
         experience_level: data.experience_level,
         bmi: parseFloat(bmi.toFixed(1)),
         avatar_state: avatarState,
         onboarding_completed: true
-      })
+      }, { onConflict: 'id' }).select().single()
 
       if (error) {
         console.error("Failed to save profile", error)
@@ -96,18 +100,14 @@ export default function OnboardingPage() {
         return
       }
 
-      // Send welcome email via our route handler
-      try {
-        await fetch('/api/email/welcome', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: user.email })
-        })
-      } catch (err) {
-        console.warn("Welcome email skipped/failed", err)
-      }
+      // Send welcome email without blocking
+      fetch('/api/email/welcome', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: user.email })
+      }).catch(err => console.warn("Welcome email skipped/failed", err))
 
-      router.push('/dashboard')
+      window.location.href = '/dashboard'
     } catch (err) {
       console.error(err)
       setIsLoading(false)

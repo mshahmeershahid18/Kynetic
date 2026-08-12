@@ -1,6 +1,11 @@
 -- Kynetic Supabase schema.
 -- Run this file in the Supabase SQL editor for the auth/profile/avatar and AI workout generation phases.
 
+drop table if exists public.workout_sessions cascade;
+drop table if exists public.workout_plans cascade;
+drop table if exists public.profiles cascade;
+drop table if exists public.exercises cascade;
+
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email text,
