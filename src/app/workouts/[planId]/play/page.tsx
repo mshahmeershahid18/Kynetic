@@ -2,12 +2,13 @@ import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { PlayClient } from "./play-client";
 import type { WorkoutPlanRecord } from "@/lib/workouts/types";
+import { ConfigNotice } from "@/components/layout/config-notice"
 
 export const dynamic = "force-dynamic";
 
 export default async function PlayWorkoutPage({ params }: { params: { planId: string } }) {
   const supabase = createServerSupabaseClient();
-  if (!supabase) return null;
+  if (!supabase) return <ConfigNotice />;
 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");

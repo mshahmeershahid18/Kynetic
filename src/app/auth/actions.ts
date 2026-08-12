@@ -18,7 +18,7 @@ function getOrigin() {
 export async function signUpWithEmail(formData: FormData) {
   const admin = getSupabaseAdmin();
   if (!admin) {
-    redirect("/auth/signup?message=Supabase%20Admin%20is%20not%20configured");
+    redirect("/auth/signup?error=Supabase%20Admin%20is%20not%20configured");
   }
 
   const email = getRequiredString(formData, "email");
@@ -36,7 +36,7 @@ export async function signUpWithEmail(formData: FormData) {
   });
 
   if (linkError || !linkData.properties?.action_link) {
-    redirect(`/auth/signup?message=${encodeURIComponent(linkError?.message || "Failed to generate link")}`);
+    redirect(`/auth/signup?error=${encodeURIComponent(linkError?.message || "Could not create that account")}`);
   }
 
   await sendAuthEmail(email, "signup", linkData.properties.action_link);
@@ -47,7 +47,7 @@ export async function signUpWithEmail(formData: FormData) {
 export async function signInWithEmail(formData: FormData) {
   const supabase = createServerSupabaseClient();
   if (!supabase) {
-    redirect("/auth/login?message=Supabase%20is%20not%20configured");
+    redirect("/auth/login?error=Supabase%20is%20not%20configured");
   }
 
   const email = getRequiredString(formData, "email");
@@ -56,7 +56,7 @@ export async function signInWithEmail(formData: FormData) {
   const { error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (error) {
-    redirect(`/auth/login?message=${encodeURIComponent(error.message)}`);
+    redirect(`/auth/login?error=${encodeURIComponent(error.message)}`);
   }
 
   redirect("/dashboard");
@@ -65,7 +65,7 @@ export async function signInWithEmail(formData: FormData) {
 export async function signInWithGoogle() {
   const supabase = createServerSupabaseClient();
   if (!supabase) {
-    redirect("/auth/login?message=Supabase%20is%20not%20configured");
+    redirect("/auth/login?error=Supabase%20is%20not%20configured");
   }
 
   const { data, error } = await supabase.auth.signInWithOAuth({
@@ -77,7 +77,7 @@ export async function signInWithGoogle() {
   });
 
   if (error || !data.url) {
-    redirect(`/auth/login?message=${encodeURIComponent(error?.message ?? "Could not start Google sign in")}`);
+    redirect(`/auth/login?error=${encodeURIComponent(error?.message ?? "Could not start Google sign in")}`);
   }
 
   redirect(data.url);
@@ -94,11 +94,11 @@ export async function signOut() {
 export async function requestPasswordReset(formData: FormData) {
   const admin = getSupabaseAdmin();
   if (!admin) {
-    redirect("/auth/reset-password?message=Supabase%20Admin%20is%20not%20configured");
+    redirect("/auth/reset-password?error=Supabase%20Admin%20is%20not%20configured");
   }
 
   const email = getRequiredString(formData, "email");
-  
+
   const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
     type: "recovery",
     email,
@@ -107,11 +107,13 @@ export async function requestPasswordReset(formData: FormData) {
     },
   });
 
-  if (linkError || !linkData.properties?.action_link) {
-    redirect(`/auth/reset-password?message=${encodeURIComponent(linkError?.message || "Failed to generate link")}`);
+  if (!linkError && linkData.properties?.action_link) {
+    await sendAuthEmail(email, "recovery", linkData.properties.action_link);
   }
 
-  await sendAuthEmail(email, "recovery", linkData.properties.action_link);
-
-  redirect("/auth/reset-password?message=Password%20reset%20link%20sent.%20Check%20your%20email.");
+  // Always report the same outcome. Surfacing "user not found" here would let
+  // anyone probe which email addresses have Kynetic accounts.
+  redirect(
+    "/auth/reset-password?message=If%20an%20account%20exists%20for%20that%20email%2C%20a%20reset%20link%20is%20on%20its%20way."
+  );
 }

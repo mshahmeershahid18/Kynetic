@@ -7,6 +7,7 @@ import { completeWorkoutAction } from "@/app/workouts/actions";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { supportsVision } from "@/lib/vision/exercise-analyzers";
 import type { AiFeedbackRecord, WorkoutPlanRecord } from "@/lib/workouts/types";
+import { ConfigNotice } from "@/components/layout/config-notice"
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +19,7 @@ export default async function WorkoutPlanPage({
   searchParams?: { message?: string };
 }) {
   const supabase = createServerSupabaseClient();
-  if (!supabase) return null;
+  if (!supabase) return <ConfigNotice />;
 
   const {
     data: { user },

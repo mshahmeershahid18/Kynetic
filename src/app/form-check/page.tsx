@@ -6,6 +6,7 @@ import { FormCheckClient } from '@/app/form-check/form-check-client'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { visionLabel } from '@/lib/vision/exercise-analyzers'
 import type { FormAnalysisRecord } from '@/lib/workouts/types'
+import { ConfigNotice } from '@/components/layout/config-notice'
 
 export const metadata = {
   title: 'Form check · Kynetic',
@@ -17,7 +18,7 @@ export const dynamic = 'force-dynamic'
 
 export default async function FormCheckPage() {
   const supabase = createServerSupabaseClient()
-  if (!supabase) return null
+  if (!supabase) return <ConfigNotice />
 
   const {
     data: { user },

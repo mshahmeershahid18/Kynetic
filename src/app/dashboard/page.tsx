@@ -14,6 +14,7 @@ import { buildDashboardGamification } from '@/lib/dashboard/gamification'
 import type { FitnessProfile } from '@/lib/profiles/types'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import type { AiFeedbackRecord, WorkoutPlanRecord, WorkoutSessionRecord } from '@/lib/workouts/types'
+import { ConfigNotice } from '@/components/layout/config-notice'
 
 export const metadata = {
   title: 'Dashboard · Kynetic',
@@ -28,7 +29,7 @@ export default async function DashboardPage({
   searchParams?: { message?: string }
 }) {
   const supabase = createServerSupabaseClient()
-  if (!supabase) return null
+  if (!supabase) return <ConfigNotice />
 
   const {
     data: { user },
