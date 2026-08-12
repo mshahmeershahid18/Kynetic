@@ -1,7 +1,9 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { AnimatedSection } from '@/components/landing/animated-section'
-import { Activity, Dumbbell, Target, User as UserIcon } from 'lucide-react'
+import { GenerateWorkoutButton, WorkoutHistory } from '@/components/workouts/workout-plan-card'
+import type { WorkoutPlanRecord, WorkoutSessionRecord } from '@/lib/workouts/types'
+import { Activity, CalendarDays, Dumbbell, Target, Timer, User as UserIcon } from 'lucide-react'
 
 // Avatar visually reflects BMI & Experience
 function Avatar({ state }: { state: string }) {
@@ -34,12 +36,12 @@ function Avatar({ state }: { state: string }) {
   )
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({ searchParams }: { searchParams?: { message?: string } }) {
   const supabase = createServerSupabaseClient()
   if (!supabase) return null
 
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
+  if (!user) redirect('/auth/login')
 
   const { data: profile } = await supabase
     .from('profiles')
@@ -51,6 +53,26 @@ export default async function DashboardPage() {
     redirect('/onboarding')
   }
 
+  const { data: workoutPlans } = await supabase
+    .from('workout_plans')
+    .select('*')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false })
+    .limit(6)
+
+  const { data: workoutSessions } = await supabase
+    .from('workout_sessions')
+    .select('*')
+    .eq('user_id', user.id)
+    .order('completed_at', { ascending: false })
+    .limit(12)
+
+  const plans = (workoutPlans ?? []) as WorkoutPlanRecord[]
+  const sessions = (workoutSessions ?? []) as WorkoutSessionRecord[]
+  const completedCount = sessions.filter((session) => session.status === 'completed').length
+  const totalMinutes = sessions.reduce((total, session) => total + (session.duration_minutes ?? 0), 0)
+  const latestPlan = plans[0]
+
   return (
     <main className="min-h-screen bg-muted/20 pb-20 pt-10">
       <div className="container-shell max-w-6xl">
@@ -58,6 +80,9 @@ export default async function DashboardPage() {
           <AnimatedSection>
             <h1 className="text-4xl font-black tracking-tight">Dashboard</h1>
             <p className="mt-2 text-muted-foreground">Welcome back, athlete.</p>
+            {searchParams?.message ? (
+              <p className="mt-4 rounded-2xl border border-border bg-card p-4 text-sm font-bold text-muted-foreground">{searchParams.message}</p>
+            ) : null}
           </AnimatedSection>
         </header>
 
@@ -80,25 +105,59 @@ export default async function DashboardPage() {
               <div className="rounded-3xl border border-border bg-card p-5">
                 <Target className="mb-3 h-6 w-6 text-primary" />
                 <p className="text-sm font-bold text-muted-foreground">Goal</p>
-                <p className="text-lg font-black leading-tight capitalize">{profile.goal.replace('-', ' ')}</p>
+                <p className="text-lg font-black leading-tight capitalize">{profile.goal?.replace('-', ' ') ?? 'Not set'}</p>
               </div>
               <div className="rounded-3xl border border-border bg-card p-5">
                 <Dumbbell className="mb-3 h-6 w-6 text-primary" />
                 <p className="text-sm font-bold text-muted-foreground">Level</p>
-                <p className="text-lg font-black leading-tight capitalize">{profile.experience_level}</p>
+                <p className="text-lg font-black leading-tight capitalize">{profile.experience_level ?? 'New'}</p>
               </div>
               <div className="rounded-3xl border border-border bg-card p-5">
-                <UserIcon className="mb-3 h-6 w-6 text-primary" />
-                <p className="text-sm font-bold text-muted-foreground">Weight</p>
-                <p className="text-2xl font-black">{profile.weight_kg}kg</p>
+                <Timer className="mb-3 h-6 w-6 text-primary" />
+                <p className="text-sm font-bold text-muted-foreground">Session</p>
+                <p className="text-lg font-black leading-tight">{profile.preferred_session_minutes ?? 30} min</p>
               </div>
             </AnimatedSection>
 
             <AnimatedSection className="flex-1 rounded-[2.5rem] border border-border bg-card p-8">
-              <h2 className="text-2xl font-black tracking-tight">Today's Session</h2>
-              <div className="mt-8 flex h-40 items-center justify-center rounded-2xl border-2 border-dashed border-border bg-muted/30">
-                <p className="font-bold text-muted-foreground">Workout generation coming in Phase 2</p>
+              <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+                <div>
+                  <p className="text-sm font-black uppercase tracking-[0.2em] text-primary">Today's Session</p>
+                  <h2 className="mt-2 text-2xl font-black tracking-tight">{latestPlan?.title ?? 'Generate your next workout'}</h2>
+                  <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
+                    {latestPlan?.summary ?? 'Kynetic uses your goal, level, equipment, limitations, and available time to create a personalized workout and save it to your account.'}
+                  </p>
+                </div>
+                <GenerateWorkoutButton compact />
               </div>
+
+              <div className="mt-6 grid gap-4 sm:grid-cols-3">
+                <div className="rounded-2xl bg-muted p-4">
+                  <CalendarDays className="mb-2 h-5 w-5 text-primary" />
+                  <p className="text-xs font-bold text-muted-foreground">Generated</p>
+                  <p className="text-2xl font-black">{plans.length}</p>
+                </div>
+                <div className="rounded-2xl bg-muted p-4">
+                  <Dumbbell className="mb-2 h-5 w-5 text-primary" />
+                  <p className="text-xs font-bold text-muted-foreground">Completed</p>
+                  <p className="text-2xl font-black">{completedCount}</p>
+                </div>
+                <div className="rounded-2xl bg-muted p-4">
+                  <Timer className="mb-2 h-5 w-5 text-primary" />
+                  <p className="text-xs font-bold text-muted-foreground">Minutes</p>
+                  <p className="text-2xl font-black">{totalMinutes}</p>
+                </div>
+              </div>
+            </AnimatedSection>
+
+            <AnimatedSection className="rounded-[2.5rem] border border-border bg-card p-8">
+              <div className="mb-6 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
+                <div>
+                  <h2 className="text-2xl font-black tracking-tight">Generated plans</h2>
+                  <p className="mt-2 text-sm text-muted-foreground">Your saved AI workouts are protected by Supabase RLS and visible only to you.</p>
+                </div>
+              </div>
+              <WorkoutHistory plans={plans} sessions={sessions} />
             </AnimatedSection>
           </div>
         </div>

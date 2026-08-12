@@ -1,12 +1,10 @@
 # Kynetic Project Status
 
-_Last verified against `plan.md` and the current workspace source tree._
+_Last verified against `plan.md` and the current workspace source tree after the AI workout generation implementation._
 
 ## Current status summary
 
-Kynetic is currently an early MVP foundation for an AI fitness coach web app. The repository has a working Next.js 14 App Router scaffold with Tailwind CSS, Supabase Auth/Profile integration, onboarding, an avatar-state calculation, a protected dashboard, and a FastAPI AI service scaffold.
-
-The implementation most closely covers **Phase 0** and a substantial portion of **Phase 1** from `plan.md`. Later workout, computer vision, AI coaching, adaptive fitness, and gamification phases remain to be built.
+Kynetic now has a working Next.js 14 App Router foundation with Supabase Auth/Profile onboarding, avatar-state calculation, a protected dashboard, and the first user-facing AI workout generation loop. Authenticated users can generate a personalized workout from their stored profile, persist the generated plan in Supabase under RLS, view the plan, mark it complete, and see saved plans/session counts on the dashboard.
 
 ## Verified implemented items
 
@@ -22,12 +20,11 @@ Verified evidence:
 - Theme support is present through `next-themes`, `src/components/providers.tsx`, `src/components/theme-toggle.tsx`, and global CSS tokens.
 - GSAP is installed and reusable animation helpers/components exist in `src/lib/animations.ts` and `src/components/landing/animated-section.tsx`.
 - Base landing page, layout, and dashboard shell are implemented under `src/app` and `src/components`.
-- FastAPI service scaffold exists under `services/ai/` with `/health` and placeholder `/generate` endpoints.
-- Next.js has an AI service health helper in `src/lib/ai-service.ts`.
+- FastAPI service exists under `services/ai/` with `/health` and `/generate` endpoints.
 
 Open or partially verified:
 
-- Deployment targets are described in `plan.md`, but no production deployment configuration is verified in the workspace.
+- Production deployment configuration is not verified in the workspace.
 - Supabase connectivity depends on runtime environment values and an external Supabase project.
 
 ### Phase 1 — Landing, auth, and onboarding
@@ -53,28 +50,30 @@ Remaining from Phase 1:
 - Welcome email sending is not implemented.
 - Custom verification/password reset email sending through Nodemailer is not implemented; the app currently relies on Supabase Auth email flows.
 - Avatar v1 is represented as a computed `avatar_state` and dashboard card, but a full body asset matrix is not verified in the workspace.
-- Email verification exists conceptually through Supabase signup redirect, but a fully customized verification UX/email pipeline is not implemented.
 
-## Remaining phases from `plan.md`
+### AI workout generation phase
 
-### Phase 2 — Workout system
+Status: **Implemented for generated plans and simple completion records**
 
-Status: **Not implemented beyond placeholders**
+Verified evidence:
 
-Remaining work:
+- `services/ai/main.py` implements `POST /generate` and returns structured workout-plan JSON based on profile snapshot fields.
+- `src/lib/ai-service.ts` calls the Python service and validates the plan shape.
+- `src/lib/workouts/fallback-generator.ts` provides a deterministic fallback generator if the Python service is offline.
+- `src/app/workouts/actions.ts` generates workouts server-side for the authenticated user and persists them to Supabase.
+- `supabase/schema.sql` and `supabase/workouts.sql` define `workout_plans` and `workout_sessions` tables with user-owned RLS policies.
+- `src/app/dashboard/page.tsx` shows generated plans, completion counts, total workout minutes, and a generate button.
+- `src/app/workouts/[planId]/page.tsx` renders saved workout details and lets users mark a session complete.
 
-- Implement real AI workout generation in the Python `/generate` endpoint.
-- Define and create Supabase tables for `exercises`, `workout_plans`, and related records.
-- Add an exercise library with instructions and demonstration media URLs.
-- Build the workout plan UI and workout session player.
-- Save generated plans and completed session records to Supabase.
+Still remaining from the broader workout system:
 
-Current evidence:
+- A normalized exercise library table with demonstration media is not implemented.
+- The plan detail page is not yet a full timed workout player.
+- Session data is basic completion metadata; later phases can enrich it with rep/form metrics.
 
-- `services/ai/main.py` contains a placeholder `/generate` endpoint only.
-- Dashboard copy and next actions indicate workout history and sessions are future work.
+## Remaining later phases from `plan.md`
 
-### Phase 3 — Real time computer vision
+### Real time computer vision
 
 Status: **Not implemented**
 
@@ -87,7 +86,7 @@ Remaining work:
 - Render skeleton overlay and real-time form feedback.
 - Save compact session summaries to Supabase.
 
-### Phase 4 — AI coach
+### AI coach
 
 Status: **Not implemented**
 
@@ -98,7 +97,7 @@ Remaining work:
 - Store coaching feedback and suggestions in Supabase.
 - Surface feedback on the dashboard or post-session UI.
 
-### Phase 5 — Adaptive fitness system
+### Adaptive fitness system
 
 Status: **Not implemented**
 
@@ -110,53 +109,39 @@ Remaining work:
 - Maintain progress snapshots over time.
 - Use progress and history to influence avatar/experience progression.
 
-### Phase 6 — Dashboard and gamification
+### Dashboard and gamification
 
 Status: **Partially scaffolded**
 
 Verified evidence:
 
 - A protected dashboard shell exists.
-- The dashboard displays avatar state, placeholder metrics, recommendations, next actions, and an empty workout history state.
+- The dashboard displays avatar state, generated workout plans, completion count, and total completed minutes.
 
 Remaining work:
 
-- Replace placeholder metrics with real progress data.
-- Add workout history and charts.
+- Add workout charts.
 - Implement streaks, XP, levels, and achievements.
 - Surface AI-generated insights from user history.
-- Connect dashboard state to workout sessions, feedback, progress, and gamification tables.
+- Connect dashboard state to feedback, progress, and gamification tables.
 
 ## Data model status
 
 Implemented in `supabase/schema.sql`:
 
-- `profiles` table
-- `profiles` Row Level Security policies
-- `updated_at` trigger for profiles
+- `profiles`
+- `workout_plans`
+- `workout_sessions`
+- Row Level Security policies for all implemented user-owned tables
 
 Still remaining from the suggested data model:
 
 - `exercises`
-- `workout_plans`
-- `workout_sessions`
 - `ai_feedback`
 - `progress`
 - `gamification`
 - Supabase Storage buckets/policies for avatar assets and exercise media
 
-## MVP readiness assessment
-
-The project is **not yet a full shippable MVP** as described in `plan.md`. It is ready as a foundation for the MVP because the core web app, auth/profile flow, onboarding, dashboard shell, Supabase profile schema, theming, animations, and Python service scaffold are in place.
-
-To reach the shippable MVP described by the plan, the next highest-impact work should be:
-
-1. Finish Phase 1 gaps: transactional email and full avatar asset presentation.
-2. Build Phase 2: workout generation, exercise library, plan persistence, and session player.
-3. Build Phase 3: browser-based rep counter.
-4. Build Phase 4: AI coaching feedback.
-5. Replace dashboard placeholders with real session, progress, and feedback data.
-
 ## Recommended next phase
 
-Proceed with **Phase 2 — Workout system** after closing any required Phase 1 email/avatar polish. Phase 2 unlocks the first real training loop: generate a plan, show exercise demos, guide the user through a workout, and create session records that later phases can use for computer vision, feedback, and adaptation.
+Proceed next with the workout player/exercise library polish or the real-time computer vision phase, depending on priority. The AI workout generation loop now produces persisted data that later player, vision, feedback, and adaptive coaching features can consume.
