@@ -25,15 +25,11 @@ The entire end-to-end workout generation and playback system is built:
 * **Exercise Library**: `exercises` table added to the Supabase schema.
 * **Session Player**: Interactive, GSAP-animated session player built at `/workouts/[planId]/play` with Warmup, Exercise (Sets/Reps), Rest countdown timer, Cooldown, and Summary states. Completed sessions update Supabase.
 
-## Phase 3 — Real time computer vision (🟢 Completed)
-The AI vision capabilities have been fully integrated into the Kynetic workout player:
-* **MediaPipe Tasks Vision:** Installed `@mediapipe/tasks-vision` to run ML models locally via WebAssembly.
-* **Live Camera Feed:** Created a `PoseTracker` component that securely accesses the user's webcam (`getUserMedia`).
-* **Squat Detection:** Implemented custom biomechanical geometry functions to measure hip, knee, and ankle angles continuously to detect full ranges of motion.
-* **Auto Rep Counting:** The tracker automatically counts complete reps and advances the workout to the rest phase without manual clicks. Form feedback (e.g., "Good depth!") is delivered in real-time.
+## Phase 3 — Real time computer vision (🔴 Not Started)
+* No MediaPipe integration or browser rep counting logic has been implemented.
 
-## Phase 4 — AI coach (🟢 Completed)
-The Python engine takes the completed session summary, recent workout history, and form feedback to generate personalized coaching advice. The Next.js app sends this data upon workout completion and stores the AI's response in the `ai_feedback` table. The dashboard correctly pulls and displays the latest feedback dynamically.
+## Phase 4 — AI coach (🔴 Not Started)
+* No coaching feedback endpoints or frontend integrations.
 
 ## Phase 5 — Adaptive fitness system (🔴 Not Started)
 * No logic to adjust difficulty or track historical progress.
@@ -42,4 +38,4 @@ The Python engine takes the completed session summary, recent workout history, a
 * Stats, streaks, and gamification UI are not implemented.
 
 ---
-**Summary:** The project has successfully completed Phase 0, Phase 1, Phase 2, and Phase 3. The core AI generation, interactive workout session player, and live computer-vision rep counting are all fully functional. The next major milestone is **Phase 4**, which introduces the AI Coach to provide personalized post-workout feedback.
+**Summary:** The project has successfully completed Phase 0, Phase 1, and Phase 2. The core AI generation and interactive workout session player is now live. The next major milestone is **Phase 3**, which introduces the MediaPipe computer vision rep counting logic in the browser.

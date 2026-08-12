@@ -61,6 +61,7 @@ export type WorkoutSessionSummary = {
   rep_count?: number;
   average_depth?: number;
   form_score?: number;
+  form_warnings?: string[];
   perceived_difficulty?: "too_easy" | "just_right" | "too_hard";
 };
 

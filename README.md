@@ -17,7 +17,8 @@ Kynetic is an AI-powered fitness coach web app. The current implementation adds 
 - Fallback TypeScript workout generator so the dashboard remains usable if the local Python service is offline.
 - Protected `/dashboard` route with profile avatar state, generated workout cards, completion counts, and saved plan history.
 - Protected `/workouts/[planId]` route to view a generated plan and mark a session complete.
-- Protected `/workouts/[planId]/play` guided session player with exercise/set progression, rest timer, elapsed time, progress tracking, and saved session summaries.
+- Protected `/workouts/[planId]/play` guided session player with exercise/set progression, rest timer, elapsed time, perceived difficulty capture, and saved session summaries.
+- Browser-only MediaPipe Tasks Vision pose tracker for squat/lunge-style movements with webcam skeleton overlay, rep counting, depth/form scoring, and compact metrics persisted in `workout_sessions.session_data`.
 
 ## Getting started
 
@@ -69,6 +70,10 @@ Health check: http://localhost:8000/health
 
 Generate endpoint: `POST http://localhost:8000/generate` with a profile snapshot. The Next.js app calls this endpoint from a server action and persists the returned plan in Supabase.
 
+## Guided workout and rep counting notes
+
+The play route uses `@mediapipe/tasks-vision` dynamically on the client. Webcam frames never leave the browser; only summary fields such as `rep_count`, `average_depth`, `form_score`, form warnings, set logs, elapsed time, and perceived difficulty are sent to the existing session completion action. MediaPipe model/WASM files are loaded from the official CDN, so rep counting requires network access and camera permission. Non squat/lunge-style exercises remain manually advanced.
+
 ## Useful scripts
 
 ```bash
@@ -81,4 +86,4 @@ npm run typecheck  # Run TypeScript without emitting files
 
 ## Roadmap alignment
 
-This repository now implements the auth/profile foundation plus the AI workout generation and guided workout player loop requested from the roadmap. Full exercise media demos, browser rep counting, and adaptive coaching remain for later phases described in `plan.md`.
+This repository now implements the auth/profile foundation, AI workout generation, AI coaching feedback, and the Phase 5 guided workout player with browser-based MediaPipe rep counting. Full exercise media demos and deeper adaptive progression rules remain for later phases described in `plan.md`.

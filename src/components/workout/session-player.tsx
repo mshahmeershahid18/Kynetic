@@ -1,313 +1,247 @@
 'use client'
 
-import { useEffect, useMemo, useState, useTransition, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
+import { ArrowLeft, CheckCircle2, Clock, Dumbbell, Loader2, RotateCcw, Timer } from 'lucide-react'
 import Link from 'next/link'
-import { ArrowLeft, CheckCircle2, ChevronRight, Clock, Dumbbell, Loader2, Pause, Play, RotateCcw, Timer } from 'lucide-react'
-import { PoseTracker } from './pose-tracker'
 
-import type { WorkoutExercise, WorkoutPlanRecord, WorkoutSessionSummary } from '@/lib/workouts/types'
+import { PoseRepCounter, type RepCounterMetrics } from '@/components/workout/pose-rep-counter'
+import { buildExerciseLog, flattenWorkout, formatClock, totalSets } from '@/lib/workouts/session'
+import type { WorkoutPlanRecord, WorkoutSessionSummary } from '@/lib/workouts/types'
 
-type PlayerStep = {
-  blockName: string
-  blockFocus: string
-  exercise: WorkoutExercise
-}
+type PlayerMode = 'exercise' | 'rest' | 'complete'
 
-type PlayerPhase = 'ready' | 'exercise' | 'rest' | 'complete'
-
-function flattenWorkout(plan: WorkoutPlanRecord): PlayerStep[] {
-  return plan.plan.blocks.flatMap((block) =>
-    block.exercises.map((exercise) => ({
-      blockName: block.name,
-      blockFocus: block.focus,
-      exercise,
-    })),
-  )
-}
-
-function formatTime(totalSeconds: number) {
-  const minutes = Math.floor(totalSeconds / 60)
-  const seconds = totalSeconds % 60
-  return `${minutes}:${seconds.toString().padStart(2, '0')}`
-}
-
-function buildSummary(args: {
-  plan: WorkoutPlanRecord
-  steps: PlayerStep[]
-  completedSets: Record<string, number>
-  elapsedSeconds: number
-}): WorkoutSessionSummary {
-  const exerciseLog = args.steps.map((step, index) => ({
-    name: step.exercise.name,
-    block: step.blockName,
-    target_sets: step.exercise.sets,
-    completed_sets: args.completedSets[String(index)] ?? 0,
-    target_reps: step.exercise.reps,
-    rest_seconds: step.exercise.rest_seconds,
-  }))
-
-  return {
-    completed_from: 'guided_session_player',
-    plan_title: args.plan.title,
-    total_exercises: args.steps.length,
-    total_sets: exerciseLog.reduce((total, item) => total + item.target_sets, 0),
-    completed_sets: exerciseLog.reduce((total, item) => total + item.completed_sets, 0),
-    exercise_log: exerciseLog,
-  }
-}
-
-export function SessionPlayer({
-  plan,
-  onComplete,
-}: {
+type SessionPlayerProps = {
   plan: WorkoutPlanRecord
   onComplete: (durationMinutes: number, summary: WorkoutSessionSummary) => Promise<void>
-}) {
-  const steps = useMemo(() => flattenWorkout(plan), [plan])
-  const [phase, setPhase] = useState<PlayerPhase>('ready')
-  const [currentIndex, setCurrentIndex] = useState(0)
-  const [currentSet, setCurrentSet] = useState(1)
-  const [restRemaining, setRestRemaining] = useState(0)
-  const [elapsedSeconds, setElapsedSeconds] = useState(0)
-  const [completedSets, setCompletedSets] = useState<Record<string, number>>({})
-  const [currentReps, setCurrentReps] = useState(0)
-  const [formFeedback, setFormFeedback] = useState<string | null>(null)
-  const [isPending, startTransition] = useTransition()
+}
 
-  const current = steps[currentIndex]
-  const progressSets = Object.values(completedSets).reduce((total, value) => total + value, 0)
-  const totalSets = steps.reduce((total, step) => total + step.exercise.sets, 0)
-  const progressPercent = totalSets ? Math.round((progressSets / totalSets) * 100) : 0
+const EMPTY_REP_METRICS: RepCounterMetrics = {
+  rep_count: 0,
+  average_depth: 0,
+  form_score: 70,
+  form_warnings: [],
+  tracking: false,
+  current_cue: 'Camera not started.',
+}
+
+export function SessionPlayer({ plan, onComplete }: SessionPlayerProps) {
+  const steps = useMemo(() => flattenWorkout(plan), [plan])
+  const plannedSets = useMemo(() => totalSets(steps), [steps])
+  const [mode, setMode] = useState<PlayerMode>('exercise')
+  const [stepIndex, setStepIndex] = useState(0)
+  const [currentSet, setCurrentSet] = useState(1)
+  const [completedSets, setCompletedSets] = useState<Record<string, number>>({})
+  const [elapsedSeconds, setElapsedSeconds] = useState(0)
+  const [restRemaining, setRestRemaining] = useState(0)
+  const [difficulty, setDifficulty] = useState<NonNullable<WorkoutSessionSummary['perceived_difficulty']>>('just_right')
+  const [repMetrics, setRepMetrics] = useState<RepCounterMetrics>(EMPTY_REP_METRICS)
+  const [isPending, startTransition] = useTransition()
+  const completedRef = useRef(false)
+
+  const step = steps[stepIndex]
+  const exercise = step?.exercise
+  const activeExerciseKey = step ? String(step.globalIndex) : '0'
+  const targetSets = Math.max(1, Number(exercise?.sets) || 1)
+  const doneSets = Object.values(completedSets).reduce((sum, value) => sum + value, 0)
+  const progress = plannedSets ? Math.round((doneSets / plannedSets) * 100) : 0
 
   useEffect(() => {
-    if (phase !== 'exercise' && phase !== 'rest') return
+    if (mode === 'complete') return
     const timer = window.setInterval(() => setElapsedSeconds((value) => value + 1), 1000)
     return () => window.clearInterval(timer)
-  }, [phase])
+  }, [mode])
 
   useEffect(() => {
-    if (phase !== 'rest') return
-    if (restRemaining <= 0) {
-      setPhase('exercise')
+    if (mode !== 'rest' || restRemaining <= 0) return
+    const timer = window.setInterval(() => {
+      setRestRemaining((value) => Math.max(0, value - 1))
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [mode, restRemaining])
+
+  useEffect(() => {
+    if (mode === 'rest' && restRemaining === 0) nextAfterRest()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, restRemaining])
+
+  function markSetComplete() {
+    if (completedRef.current || !step || !exercise) return
+    const key = String(step.globalIndex)
+    const nextSetCount = Math.min(targetSets, (completedSets[key] ?? 0) + 1)
+    const nextCompleted = { ...completedSets, [key]: nextSetCount }
+    setCompletedSets(nextCompleted)
+
+    const finalSetForExercise = currentSet >= targetSets
+    const finalExercise = stepIndex >= steps.length - 1
+
+    if (finalSetForExercise && finalExercise) {
+      const exerciseLog = buildExerciseLog(steps, nextCompleted)
+      const completedSetCount = exerciseLog.reduce((sum, item) => sum + item.completed_sets, 0)
+      const durationMinutes = Math.max(1, Math.ceil(elapsedSeconds / 60))
+      const summary: WorkoutSessionSummary = {
+        completed_from: 'guided_session_player',
+        plan_title: plan.title,
+        total_exercises: steps.length,
+        total_sets: plannedSets,
+        completed_sets: completedSetCount,
+        elapsed_seconds: elapsedSeconds,
+        exercise_log: exerciseLog,
+        rep_count: repMetrics.rep_count,
+        average_depth: repMetrics.average_depth,
+        form_score: repMetrics.form_score,
+        form_warnings: repMetrics.form_warnings,
+        perceived_difficulty: difficulty,
+      }
+      completedRef.current = true
+      setMode('complete')
+      startTransition(() => {
+        void onComplete(durationMinutes, summary)
+      })
       return
     }
 
-    const timer = window.setTimeout(() => setRestRemaining((value) => Math.max(value - 1, 0)), 1000)
-    return () => window.clearTimeout(timer)
-  }, [phase, restRemaining])
-
-  function resetPlayer() {
-    setPhase('ready')
-    setCurrentIndex(0)
-    setCurrentSet(1)
-    setRestRemaining(0)
-    setElapsedSeconds(0)
-    setCompletedSets({})
-    setCurrentReps(0)
-    setFormFeedback(null)
+    const restSeconds = Math.max(5, Number(exercise.rest_seconds) || 45)
+    setRestRemaining(restSeconds)
+    setMode('rest')
   }
 
-  function advanceAfterSet() {
-    if (!current) return
-
-    const nextCompletedSets = {
-      ...completedSets,
-      [String(currentIndex)]: (completedSets[String(currentIndex)] ?? 0) + 1,
-    }
-    setCompletedSets(nextCompletedSets)
-    setCurrentReps(0)
-    setFormFeedback(null)
-
-    const hasMoreSets = currentSet < current.exercise.sets
-    const hasMoreExercises = currentIndex < steps.length - 1
-
-    if (hasMoreSets) {
-      setCurrentSet((set) => set + 1)
-      setRestRemaining(current.exercise.rest_seconds)
-      setPhase('rest')
-      return
-    }
-
-    if (hasMoreExercises) {
-      setCurrentIndex((index) => index + 1)
+  function nextAfterRest() {
+    if (!step || !exercise) return
+    if (currentSet < targetSets) {
+      setCurrentSet((value) => value + 1)
+    } else {
+      setStepIndex((value) => Math.min(steps.length - 1, value + 1))
       setCurrentSet(1)
-      setRestRemaining(current.exercise.rest_seconds)
-      setPhase('rest')
-      return
     }
-
-    setPhase('complete')
-    saveSession(nextCompletedSets)
+    setMode('exercise')
   }
 
-  function handleRepCompleted(repsCompleted: number, avgDepth: number) {
-    setCurrentReps(repsCompleted)
-    const targetReps = parseInt(current?.exercise.reps || "0")
-    if (targetReps > 0 && repsCompleted >= targetReps) {
-      // Small delay before advancing so the user can register they finished
-      setTimeout(() => advanceAfterSet(), 1500)
-    }
+  function skipRest() {
+    setRestRemaining(0)
+    nextAfterRest()
   }
 
-  function handleFormFeedback(message: string | null) {
-    setFormFeedback(message)
-  }
-
-  function saveSession(setsSnapshot: Record<string, number> = completedSets) {
-    const durationMinutes = Math.max(1, Math.ceil(elapsedSeconds / 60))
-    const summary = buildSummary({ plan, steps, completedSets: setsSnapshot, elapsedSeconds })
-    startTransition(async () => {
-      await onComplete(durationMinutes, { ...summary, elapsed_seconds: elapsedSeconds })
-    })
-  }
-
-  function completeSession() {
-    saveSession()
-  }
-
-  if (!steps.length || !current) {
-    return (
-      <div className="rounded-[2.5rem] border border-border bg-card p-8 text-center">
-        <Dumbbell className="mx-auto h-10 w-10 text-primary" />
-        <h1 className="mt-4 text-3xl font-black">This plan has no exercises</h1>
-        <Link href={`/workouts/${plan.id}`} className="mt-6 inline-flex rounded-full bg-primary px-5 py-3 font-black text-primary-foreground">
-          Back to plan
-        </Link>
-      </div>
-    )
+  if (!step || !exercise) {
+    return <div className="rounded-[2rem] border border-border bg-card p-8 text-center font-black">This plan has no playable exercises.</div>
   }
 
   return (
-    <div className="mx-auto max-w-5xl">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <Link href={`/workouts/${plan.id}`} className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-sm font-bold transition hover:border-primary/60">
           <ArrowLeft className="h-4 w-4" /> Plan details
         </Link>
-        <button onClick={resetPlayer} className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-sm font-bold transition hover:bg-muted">
-          <RotateCcw className="h-4 w-4" /> Reset
-        </button>
+        <div className="flex items-center gap-2 rounded-full bg-card px-4 py-2 text-sm font-black">
+          <Clock className="h-4 w-4 text-primary" /> {formatClock(elapsedSeconds)} elapsed
+        </div>
       </div>
 
-      <section className="overflow-hidden rounded-[2.5rem] border border-border bg-card shadow-sm">
-        <div className="border-b border-border bg-muted/60 p-6">
-          <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+      <section className="overflow-hidden rounded-[2.5rem] border border-border bg-card">
+        <div className="bg-muted p-5">
+          <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <p className="text-sm font-black uppercase tracking-[0.2em] text-primary">Guided workout player</p>
-              <h1 className="mt-2 text-3xl font-black tracking-tight md:text-4xl">{plan.title}</h1>
+              <p className="text-xs font-black uppercase tracking-[0.25em] text-primary">Guided session</p>
+              <h1 className="mt-2 text-3xl font-black tracking-tight md:text-5xl">{plan.title}</h1>
             </div>
-            <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
-              <Stat icon={<Clock className="h-4 w-4" />} label="Elapsed" value={formatTime(elapsedSeconds)} />
-              <Stat icon={<Timer className="h-4 w-4" />} label="Progress" value={`${progressPercent}%`} />
-              <Stat icon={<Dumbbell className="h-4 w-4" />} label="Sets" value={`${progressSets}/${totalSets}`} />
-            </div>
+            <div className="rounded-full bg-background px-4 py-2 text-sm font-black">{progress}% complete</div>
           </div>
-          <div className="mt-6 h-3 overflow-hidden rounded-full bg-background">
-            <div className="h-full rounded-full bg-primary transition-all duration-500" style={{ width: `${progressPercent}%` }} />
+          <div className="mt-5 h-3 overflow-hidden rounded-full bg-background">
+            <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progress}%` }} />
           </div>
         </div>
 
-        <div className="grid gap-0 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="p-6 md:p-8">
-            {phase === 'rest' ? (
-              <div className="flex min-h-[360px] flex-col items-center justify-center rounded-[2rem] bg-background p-8 text-center">
-                <Pause className="h-12 w-12 text-primary" />
-                <p className="mt-4 text-sm font-black uppercase tracking-[0.25em] text-primary">Rest</p>
-                <p className="mt-3 text-7xl font-black tabular-nums">{formatTime(restRemaining)}</p>
-                <p className="mt-4 text-muted-foreground">Next: {current.exercise.name}</p>
-                <button onClick={() => setPhase('exercise')} className="mt-8 rounded-full bg-primary px-6 py-3 font-black text-primary-foreground transition hover:scale-[1.02]">
-                  Skip rest
-                </button>
-              </div>
-            ) : phase === 'complete' ? (
-              <div className="flex min-h-[360px] flex-col items-center justify-center rounded-[2rem] bg-background p-8 text-center">
-                <CheckCircle2 className="h-14 w-14 text-green-500" />
-                <h2 className="mt-5 text-4xl font-black">Session complete</h2>
-                <p className="mt-3 max-w-md text-muted-foreground">Save this guided workout to your Supabase workout history.</p>
-                <button disabled={isPending} onClick={completeSession} className="mt-8 inline-flex items-center gap-2 rounded-full bg-primary px-7 py-4 font-black text-primary-foreground transition hover:scale-[1.02] disabled:opacity-60">
-                  {isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <CheckCircle2 className="h-5 w-5" />}
-                  {isPending ? 'Saving...' : 'Save completion'}
-                </button>
-              </div>
-            ) : (
-              <div className="rounded-[2rem] bg-background p-6 md:p-8">
-                <p className="text-sm font-black text-primary">{current.blockName} • {current.blockFocus}</p>
-                <h2 className="mt-3 text-4xl font-black tracking-tight">{current.exercise.name}</h2>
-                <p className="mt-2 text-sm font-bold text-muted-foreground">{current.exercise.muscle_group} • {current.exercise.equipment}</p>
-
-                <div className="mt-8 grid gap-3 sm:grid-cols-3">
-                  <BigMetric label="Set" value={`${currentSet}/${current.exercise.sets}`} />
-                  <BigMetric label="Target" value={current.exercise.reps} />
-                  <BigMetric label="Rest" value={`${current.exercise.rest_seconds}s`} />
-                </div>
-
-                <div className="mt-8 space-y-3">
-                  <h3 className="font-black">Coaching cues</h3>
-                  {current.exercise.instructions.map((instruction) => (
-                    <p key={instruction} className="rounded-2xl border border-border bg-card p-4 text-sm leading-6 text-muted-foreground">
-                      {instruction}
-                    </p>
-                  ))}
-                </div>
-
-                {phase === 'exercise' && (
-                  <div className="mt-8 border border-border rounded-[2.5rem] p-4 bg-muted/30">
-                    <div className="mb-4 flex items-center justify-between px-2">
-                      <h3 className="font-black">Live AI Tracker</h3>
-                      <div className="flex gap-4">
-                        <div className="text-right">
-                          <p className="text-xs font-bold text-muted-foreground uppercase">Live Reps</p>
-                          <p className="text-2xl font-black text-primary">{currentReps}</p>
-                        </div>
-                      </div>
-                    </div>
-                    <PoseTracker 
-                      exerciseName={current.exercise.name} 
-                      targetReps={parseInt(current.exercise.reps || "0")} 
-                      onRepCompleted={handleRepCompleted} 
-                      onFormFeedback={handleFormFeedback} 
-                    />
-                    {formFeedback && (
-                      <div className="mt-4 rounded-2xl bg-primary/20 p-4 text-center border border-primary/30">
-                        <p className="font-bold text-primary">{formFeedback}</p>
-                      </div>
-                    )}
+        {mode === 'rest' ? (
+          <div className="grid gap-6 p-6 lg:grid-cols-[1fr_0.8fr]">
+            <div className="rounded-[2rem] bg-background p-8 text-center">
+              <Timer className="mx-auto h-12 w-12 text-primary" />
+              <p className="mt-4 text-sm font-black uppercase tracking-[0.2em] text-primary">Rest</p>
+              <p className="mt-2 text-7xl font-black tabular-nums">{formatClock(restRemaining)}</p>
+              <p className="mx-auto mt-4 max-w-md text-muted-foreground">Breathe, shake out tension, and get ready for the next {currentSet < targetSets ? 'set' : 'exercise'}.</p>
+              <button type="button" onClick={skipRest} className="focus-ring mt-6 rounded-full bg-primary px-6 py-3 font-black text-primary-foreground">Skip rest</button>
+            </div>
+            <SessionSidebar doneSets={doneSets} plannedSets={plannedSets} repMetrics={repMetrics} />
+          </div>
+        ) : (
+          <div className="grid gap-6 p-6 lg:grid-cols-[1.05fr_0.95fr]">
+            <div className="space-y-5">
+              <div className="rounded-[2rem] bg-background p-6">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <p className="font-black text-primary">{step.block.name} • {step.block.focus}</p>
+                    <h2 className="mt-2 text-4xl font-black tracking-tight">{exercise.name}</h2>
+                    <p className="mt-2 text-sm font-bold text-muted-foreground">Exercise {stepIndex + 1} of {steps.length} • Set {currentSet} of {targetSets}</p>
                   </div>
-                )}
-
-                {phase === 'ready' ? (
-                  <button onClick={() => setPhase('exercise')} className="mt-8 inline-flex w-full items-center justify-center gap-2 rounded-full bg-primary px-7 py-4 font-black text-primary-foreground transition hover:scale-[1.01]">
-                    <Play className="h-5 w-5 fill-primary-foreground" /> Start workout
-                  </button>
-                ) : (
-                  <button onClick={advanceAfterSet} className="mt-8 inline-flex w-full items-center justify-center gap-2 rounded-full bg-primary px-7 py-4 font-black text-primary-foreground transition hover:scale-[1.01]">
-                    Complete set <ChevronRight className="h-5 w-5" />
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-
-          <aside className="border-t border-border bg-muted/40 p-6 lg:border-l lg:border-t-0">
-            <h3 className="text-xl font-black">Exercise queue</h3>
-            <div className="mt-5 space-y-3">
-              {steps.map((step, index) => (
-                <div key={`${step.blockName}-${step.exercise.name}`} className={`rounded-2xl border p-4 ${index === currentIndex ? 'border-primary bg-primary/10' : 'border-border bg-card'}`}>
-                  <p className="font-black">{step.exercise.name}</p>
-                  <p className="mt-1 text-xs font-bold text-muted-foreground">{step.exercise.sets} sets × {step.exercise.reps}</p>
+                  <div className="rounded-2xl bg-primary/10 px-4 py-3 text-right font-black text-primary">
+                    <p>{exercise.reps} reps</p>
+                    <p className="text-xs uppercase tracking-widest">target</p>
+                  </div>
                 </div>
-              ))}
+                <ul className="mt-6 space-y-3 text-sm leading-6 text-muted-foreground">
+                  {exercise.instructions.map((instruction) => <li key={instruction} className="rounded-2xl bg-card p-4">• {instruction}</li>)}
+                </ul>
+                <div className="mt-6 flex flex-wrap gap-3">
+                  <button type="button" onClick={markSetComplete} disabled={isPending} className="focus-ring inline-flex items-center gap-2 rounded-full bg-primary px-6 py-4 font-black text-primary-foreground transition hover:scale-[1.02] disabled:opacity-60">
+                    {isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <CheckCircle2 className="h-5 w-5" />} Complete set
+                  </button>
+                  <button type="button" onClick={() => setCurrentSet(1)} className="focus-ring inline-flex items-center gap-2 rounded-full border border-border bg-card px-6 py-4 font-black transition hover:bg-muted">
+                    <RotateCcw className="h-5 w-5" /> Reset set counter
+                  </button>
+                </div>
+              </div>
+
+              <DifficultyPicker value={difficulty} onChange={setDifficulty} />
             </div>
-          </aside>
-        </div>
+
+            <div className="space-y-5">
+              <PoseRepCounter key={activeExerciseKey} active={mode === 'exercise' && !isPending} exerciseName={exercise.name} onMetricsChange={setRepMetrics} />
+              <SessionSidebar doneSets={doneSets} plannedSets={plannedSets} repMetrics={repMetrics} />
+            </div>
+          </div>
+        )}
       </section>
+
+      {mode === 'complete' ? (
+        <div className="rounded-[2rem] border border-primary/40 bg-primary/10 p-6 text-center">
+          <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
+          <h2 className="mt-3 text-2xl font-black">Saving session and generating coach feedback…</h2>
+        </div>
+      ) : null}
     </div>
   )
 }
 
-function Stat({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
-  return <div className="rounded-2xl bg-background px-4 py-3"><div className="flex items-center gap-2 text-primary">{icon}<span className="text-xs font-bold text-muted-foreground">{label}</span></div><p className="mt-1 font-black">{value}</p></div>
+function SessionSidebar({ doneSets, plannedSets, repMetrics }: { doneSets: number; plannedSets: number; repMetrics: RepCounterMetrics }) {
+  return (
+    <aside className="rounded-[2rem] border border-border bg-background p-5">
+      <h3 className="flex items-center gap-2 text-xl font-black"><Dumbbell className="h-5 w-5 text-primary" /> Session metrics</h3>
+      <div className="mt-5 grid grid-cols-2 gap-3">
+        <Metric label="Sets" value={`${doneSets}/${plannedSets}`} />
+        <Metric label="CV reps" value={String(repMetrics.rep_count)} />
+        <Metric label="Avg depth" value={`${repMetrics.average_depth}%`} />
+        <Metric label="Form" value={`${repMetrics.form_score}`} />
+      </div>
+      <p className="mt-4 rounded-2xl bg-muted p-3 text-sm font-bold text-muted-foreground">{repMetrics.current_cue}</p>
+      {repMetrics.form_warnings.length ? <ul className="mt-3 space-y-2 text-sm text-muted-foreground">{repMetrics.form_warnings.map((warning) => <li key={warning}>• {warning}</li>)}</ul> : null}
+    </aside>
+  )
 }
 
-function BigMetric({ label, value }: { label: string; value: string }) {
-  return <div className="rounded-2xl border border-border bg-card p-4"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">{label}</p><p className="mt-2 text-2xl font-black">{value}</p></div>
+function DifficultyPicker({ value, onChange }: { value: NonNullable<WorkoutSessionSummary['perceived_difficulty']>; onChange: (value: NonNullable<WorkoutSessionSummary['perceived_difficulty']>) => void }) {
+  const options: NonNullable<WorkoutSessionSummary['perceived_difficulty']>[] = ['too_easy', 'just_right', 'too_hard']
+  return (
+    <div className="rounded-[2rem] border border-border bg-background p-5">
+      <p className="font-black">How does this feel?</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {options.map((option) => (
+          <button key={option} type="button" onClick={() => onChange(option)} className={`rounded-full px-4 py-2 text-sm font-black capitalize transition ${value === option ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-card'}`}>
+            {option.replace('_', ' ')}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return <div className="rounded-2xl bg-card p-4"><p className="text-xs font-black uppercase tracking-widest text-muted-foreground">{label}</p><p className="mt-1 text-2xl font-black">{value}</p></div>
 }
