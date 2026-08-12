@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft, CheckCircle2, Clock, Dumbbell, Target } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Clock, Dumbbell, Target, Play } from "lucide-react";
 
 import { completeWorkoutAction } from "@/app/workouts/actions";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
@@ -48,13 +48,18 @@ export default async function WorkoutPlanPage({ params, searchParams }: { params
             <h1 className="mt-3 text-4xl font-black tracking-tight md:text-5xl">{workout.title}</h1>
             <p className="mt-4 max-w-3xl leading-7 text-muted-foreground">{workout.summary}</p>
           </div>
-          <form action={completeWorkoutAction} className="rounded-[2rem] bg-muted p-4">
-            <input type="hidden" name="plan_id" value={workout.id} />
-            <input type="hidden" name="duration_minutes" value={workout.duration_minutes ?? workout.plan.duration_minutes} />
-            <button type="submit" className="focus-ring inline-flex w-full items-center justify-center gap-2 rounded-full bg-primary px-6 py-4 font-black text-primary-foreground transition hover:scale-[1.02]">
-              <CheckCircle2 className="h-5 w-5" /> {completed ? "Complete again" : "Mark complete"}
-            </button>
-          </form>
+          <div className="flex flex-col gap-3 rounded-[2rem] bg-muted p-4 sm:min-w-[300px]">
+            <Link href={`/workouts/${workout.id}/play`} className="focus-ring inline-flex w-full items-center justify-center gap-2 rounded-full bg-primary px-6 py-4 font-black text-primary-foreground transition hover:scale-[1.02]">
+              <Play className="h-5 w-5 fill-primary-foreground" /> Start Session
+            </Link>
+            <form action={completeWorkoutAction}>
+              <input type="hidden" name="plan_id" value={workout.id} />
+              <input type="hidden" name="duration_minutes" value={workout.duration_minutes ?? workout.plan.duration_minutes} />
+              <button type="submit" className="focus-ring inline-flex w-full items-center justify-center gap-2 rounded-full border border-border bg-background px-6 py-4 font-black transition hover:bg-muted">
+                <CheckCircle2 className="h-5 w-5" /> {completed ? "Complete again" : "Mark complete manually"}
+              </button>
+            </form>
+          </div>
         </div>
 
         <div className="mt-8 grid gap-3 md:grid-cols-4">

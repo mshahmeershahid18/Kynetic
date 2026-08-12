@@ -124,3 +124,19 @@ create policy "Users can update their own workout sessions"
 
 create index if not exists workout_sessions_user_completed_idx
   on public.workout_sessions (user_id, completed_at desc);
+
+create table if not exists public.exercises (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  instructions text[] not null default '{}',
+  muscle_group text,
+  equipment text,
+  demo_media_url text,
+  created_at timestamptz not null default now()
+);
+
+alter table public.exercises enable row level security;
+
+create policy "Exercises are readable by everyone"
+  on public.exercises for select
+  using (true);
