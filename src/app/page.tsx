@@ -1,6 +1,7 @@
 import { AnimatedSection } from "@/components/landing/animated-section";
 import { getAiServiceHealth } from "@/lib/ai-service";
 import { hasSupabaseConfig } from "@/lib/config/env";
+import Link from "next/link";
 
 const features = [
   "AI-generated workout plans tailored to your profile and goals.",
@@ -38,12 +39,12 @@ export default async function Home() {
                 Kynetic is being built as a personalized training companion: profile-aware workouts, avatar progress, exercise demos, private browser rep counting, and adaptive coaching.
               </p>
               <div data-animate className="mt-9 flex flex-col gap-3 sm:flex-row">
-                <a href="/auth/signup" className="focus-ring rounded-full bg-primary px-6 py-3 text-center font-bold text-primary-foreground shadow-glow transition hover:scale-[1.02]">
-                  Create your profile
-                </a>
-                <a href="/auth/login" className="focus-ring rounded-full border border-border bg-card px-6 py-3 text-center font-bold transition hover:border-primary/60">
-                  Sign in
-                </a>
+                <Link href="/signup" className="focus-ring rounded-full bg-primary px-6 py-3 text-center font-bold text-primary-foreground shadow-glow transition hover:scale-[1.02]">
+                  Start training
+                </Link>
+                <Link href="/login" className="focus-ring rounded-full border border-border bg-card px-6 py-3 text-center font-bold transition hover:border-primary/60">
+                  Log in
+                </Link>
               </div>
             </div>
             <div data-animate className="rounded-[2rem] border border-border bg-card/80 p-6 shadow-2xl backdrop-blur">
