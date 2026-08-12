@@ -92,9 +92,9 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
       <div className="container-shell max-w-7xl">
         <header className="mb-12">
           <AnimatedSection>
-            <p className="font-black uppercase tracking-[0.25em] text-primary">Phase 6 command center</p>
+            <p className="font-black uppercase tracking-[0.25em] text-primary">Kynetic Command Center</p>
             <h1 className="mt-3 text-4xl font-black tracking-tight md:text-5xl">Dashboard</h1>
-            <p className="mt-2 max-w-2xl text-muted-foreground">Welcome back, athlete. Track your avatar, training history, progress charts, streaks, XP, achievements, and AI insights in one place.</p>
+            <p className="mt-2 max-w-2xl text-muted-foreground">Welcome back. Track your personalized avatar, training history, progress charts, and AI insights all in one place.</p>
             {searchParams?.message ? <p className="mt-4 rounded-2xl border border-border bg-card p-4 text-sm font-bold text-muted-foreground">{searchParams.message}</p> : null}
           </AnimatedSection>
         </header>
