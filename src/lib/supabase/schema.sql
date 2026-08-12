@@ -1,6 +1,7 @@
 -- Kynetic Supabase schema.
 -- Run this file in the Supabase SQL editor for the auth/profile/avatar and AI workout generation phases.
 
+drop table if exists public.ai_feedback cascade;
 drop table if exists public.workout_sessions cascade;
 drop table if exists public.workout_plans cascade;
 drop table if exists public.profiles cascade;
@@ -145,3 +146,44 @@ alter table public.exercises enable row level security;
 create policy "Exercises are readable by everyone"
   on public.exercises for select
   using (true);
+
+create table if not exists public.ai_feedback (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  session_id uuid not null references public.workout_sessions(id) on delete cascade,
+  workout_plan_id uuid references public.workout_plans(id) on delete set null,
+  feedback jsonb not null,
+  feedback_text text not null,
+  suggestions text[] default '{}',
+  source_payload jsonb,
+  created_at timestamptz not null default now()
+);
+
+alter table public.ai_feedback enable row level security;
+
+create policy "Users can read their own AI feedback"
+  on public.ai_feedback for select
+  using (auth.uid() = user_id);
+
+create policy "Users can insert their own AI feedback"
+  on public.ai_feedback for insert
+  with check (
+    auth.uid() = user_id
+    and exists (
+      select 1 from public.workout_sessions
+      where workout_sessions.id = session_id
+      and workout_sessions.user_id = auth.uid()
+    )
+  );
+
+create policy "Users can update their own AI feedback"
+  on public.ai_feedback for update
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create policy "Users can delete their own AI feedback"
+  on public.ai_feedback for delete
+  using (auth.uid() = user_id);
+
+create index if not exists ai_feedback_user_created_idx
+  on public.ai_feedback (user_id, created_at desc);

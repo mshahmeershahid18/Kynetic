@@ -1,6 +1,6 @@
 # Kynetic
 
-Kynetic is an AI-powered fitness coach web app. The current implementation adds Supabase authentication, guided onboarding for a personalized fitness profile/avatar state, AI workout generation, persisted workout plans/session completions, and a protected dashboard that surfaces saved plans.
+Kynetic is an AI-powered fitness coach web app. The current implementation adds Supabase authentication, guided onboarding for a personalized fitness profile/avatar state, AI workout generation, persisted workout plans/session completions, AI coaching feedback, browser rep counting, and a Phase 6 protected dashboard with progress charts and gamification.
 
 ## What is included
 
@@ -15,7 +15,7 @@ Kynetic is an AI-powered fitness coach web app. The current implementation adds 
 - FastAPI `/generate` endpoint that returns strict workout-plan JSON from profile data.
 - Server-side workout generation flow that uses goal, fitness level, experience, equipment, limitations, and available time.
 - Fallback TypeScript workout generator so the dashboard remains usable if the local Python service is offline.
-- Protected `/dashboard` route with profile avatar state, generated workout cards, completion counts, and saved plan history.
+- Protected `/dashboard` route with profile avatar state, headline fitness stats, generated workout cards, saved plan history, workout history, 7-day progress charts, XP, levels, streaks, achievements, and AI history insights.
 - Protected `/workouts/[planId]` route to view a generated plan and mark a session complete.
 - Protected `/workouts/[planId]/play` guided session player with exercise/set progression, rest timer, elapsed time, perceived difficulty capture, and saved session summaries.
 - Browser-only MediaPipe Tasks Vision pose tracker for squat/lunge-style movements with webcam skeleton overlay, rep counting, depth/form scoring, and compact metrics persisted in `workout_sessions.session_data`.
@@ -46,7 +46,7 @@ AI_SERVICE_URL=http://localhost:8000
 ## Supabase setup
 
 1. Create a Supabase project.
-2. In the SQL editor, run `supabase/schema.sql` to create the profile and workout tables with RLS policies. If your project already has the profile schema from an earlier phase, you can run `supabase/workouts.sql` for only the workout tables/policies.
+2. In the SQL editor, run `supabase/schema.sql` to create the profile, workout, and AI feedback tables with RLS policies. If your project already has the profile schema from an earlier phase, you can run `supabase/workouts.sql` for only the workout tables/policies and `supabase/ai-feedback.sql` for coaching feedback persistence.
 3. In Auth settings, enable email/password authentication.
 4. To use Google OAuth, enable the Google provider and set the redirect URL to:
 
@@ -86,4 +86,4 @@ npm run typecheck  # Run TypeScript without emitting files
 
 ## Roadmap alignment
 
-This repository now implements the auth/profile foundation, AI workout generation, AI coaching feedback, and the Phase 5 guided workout player with browser-based MediaPipe rep counting. Full exercise media demos and deeper adaptive progression rules remain for later phases described in `plan.md`.
+This repository now implements the auth/profile foundation, AI workout generation, AI coaching feedback, the guided workout player with browser-based MediaPipe rep counting, and the Phase 6 dashboard/gamification layer. Full exercise media demos and deeper adaptive progression rules remain for later phases described in `plan.md`.
