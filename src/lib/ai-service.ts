@@ -29,12 +29,15 @@ function isGeneratedWorkoutPlan(value: unknown): value is GeneratedWorkoutPlan {
   return Boolean(plan.title && Array.isArray(plan.blocks) && Array.isArray(plan.warmup) && Array.isArray(plan.cooldown));
 }
 
-export async function generateWorkoutPlan(profile: WorkoutProfileSnapshot): Promise<{ plan: GeneratedWorkoutPlan; source: "ai-service" | "fallback" }> {
+export async function generateWorkoutPlan(
+  profile: WorkoutProfileSnapshot,
+  context: Record<string, unknown> = {}
+): Promise<{ plan: GeneratedWorkoutPlan; source: "ai-service" | "fallback" }> {
   try {
     const response = await fetch(`${env.aiServiceUrl}/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ profile }),
+      body: JSON.stringify({ profile, context }),
       cache: "no-store",
     });
 

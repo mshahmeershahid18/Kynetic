@@ -33,7 +33,28 @@ async function requireUserAndProfile() {
 export async function generateWorkoutAction() {
   const { supabase, user, profile } = await requireUserAndProfile();
   const snapshot = toWorkoutProfileSnapshot(profile);
-  const { plan, source } = await generateWorkoutPlan(snapshot);
+
+  const { data: recentSessions } = await supabase
+    .from("workout_sessions")
+    .select("*")
+    .eq("user_id", user.id)
+    .eq("status", "completed")
+    .order("completed_at", { ascending: false })
+    .limit(5);
+
+  const { data: recentFeedback } = await supabase
+    .from("ai_feedback")
+    .select("feedback, feedback_text, suggestions, created_at")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false })
+    .limit(5);
+
+  const context = {
+    recent_sessions: recentSessions ?? [],
+    recent_feedback: recentFeedback ?? [],
+  };
+
+  const { plan, source } = await generateWorkoutPlan(snapshot, context);
 
   const { data, error } = await supabase
     .from("workout_plans")
@@ -45,7 +66,7 @@ export async function generateWorkoutAction() {
       difficulty: plan.difficulty,
       goal: plan.goal,
       plan,
-      source_profile_snapshot: { ...snapshot, generation_source: source },
+      source_profile_snapshot: { ...snapshot, generation_source: source, context_used: true },
     })
     .select("id")
     .single();
@@ -144,6 +165,38 @@ export async function completeWorkoutAction(formData: FormData) {
 
   if (feedbackError) {
     redirect(`/dashboard?message=${encodeURIComponent(`Workout completed, but feedback could not be saved: ${feedbackError.message}`)}`);
+  }
+
+  // Phase 5: Avatar Auto-leveling
+  const { count } = await supabase
+    .from("workout_sessions")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .eq("status", "completed");
+
+  const completedCount = count ?? 0;
+  let newExperience = profile.experience_level;
+
+  if (completedCount >= 15 && (!profile.experience_level || profile.experience_level === "none" || profile.experience_level === "beginner")) {
+    newExperience = "intermediate";
+  } else if (completedCount >= 5 && (!profile.experience_level || profile.experience_level === "none")) {
+    newExperience = "beginner";
+  }
+
+  if (newExperience !== profile.experience_level) {
+    // Re-calculate avatar_state
+    let bmiBucket = "normal";
+    const bmi = profile.bmi ?? 22;
+    if (bmi < 18.5) bmiBucket = "underweight";
+    else if (bmi >= 25 && bmi < 30) bmiBucket = "overweight";
+    else if (bmi >= 30) bmiBucket = "obese";
+    
+    const newAvatarState = `${bmiBucket}-${newExperience || "none"}`;
+
+    await supabase
+      .from("profiles")
+      .update({ experience_level: newExperience, avatar_state: newAvatarState })
+      .eq("id", user.id);
   }
 
   revalidatePath("/dashboard");
