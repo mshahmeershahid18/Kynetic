@@ -1,17 +1,19 @@
 # Kynetic
 
-Kynetic is an AI-powered fitness web app foundation. This phase bootstraps a runnable Next.js App Router frontend with Supabase-ready configuration, dark/light theming, GSAP animation helpers, and a separate FastAPI service scaffold for future AI workout generation.
+Kynetic is an AI-powered fitness web app foundation. The current implementation adds Supabase authentication, guided onboarding for a personalized fitness profile/avatar state, and a protected dashboard shell for progress, recommendations, and next actions.
 
-## What is included in this phase
+## What is included
 
-- Next.js 14 App Router project with TypeScript.
-- Tailwind CSS design tokens for system-aware dark and light themes.
-- Theme toggle with persisted user preference via `next-themes`.
-- Marketing landing page with product positioning and email-capture placeholder.
-- Supabase browser client factory and environment variable example.
-- Shared GSAP entrance animation helper.
-- FastAPI service under `services/ai` with `/health` and placeholder `/generate` endpoints.
-- Linting, type checking, Prettier, and build scripts.
+- Next.js 14 App Router project with TypeScript and Tailwind CSS.
+- System-aware dark/light themes with `next-themes`.
+- Supabase Auth session handling with SSR cookies.
+- Email/password signup and login.
+- Google OAuth sign-in route using Supabase Auth.
+- Password reset request flow through Supabase.
+- Protected `/onboarding` route that collects goals, body metrics, experience, limitations, equipment, and preferences.
+- `profiles` table SQL with Row Level Security policies in `supabase/schema.sql`.
+- Protected `/dashboard` route with profile avatar state, starter progress metrics, recommendations, and next actions.
+- FastAPI service scaffold under `services/ai` retained for later AI workout generation.
 
 ## Getting started
 
@@ -25,15 +27,29 @@ Open http://localhost:3000.
 
 ## Environment variables
 
-Copy `.env.example` to `.env.local` and fill in values when available:
+Copy `.env.example` to `.env.local` and fill in values:
 
 ```bash
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
+NEXT_PUBLIC_SITE_URL=http://localhost:3000
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
 AI_SERVICE_URL=http://localhost:8000
 ```
 
-The app still runs without Supabase values; the landing page will show the integration as awaiting `.env.local`.
+`/auth`, `/onboarding`, and `/dashboard` require Supabase values. The landing page still renders without them.
+
+## Supabase setup
+
+1. Create a Supabase project.
+2. In the SQL editor, run `supabase/schema.sql` to create the `profiles` table and RLS policies.
+3. In Auth settings, enable email/password authentication.
+4. To use Google OAuth, enable the Google provider and set the redirect URL to:
+
+```text
+http://localhost:3000/auth/callback
+```
+
+For production, also add your deployed site callback URL and set `NEXT_PUBLIC_SITE_URL` accordingly.
 
 ## Run the FastAPI AI service
 
@@ -59,4 +75,4 @@ npm run typecheck  # Run TypeScript without emitting files
 
 ## Roadmap alignment
 
-This repository currently implements Phase 0 / Project foundation only. Auth, onboarding, workout generation, exercise demos, rep counting, and adaptive coaching are intentionally left for later phases described in `plan.md`.
+This repository now implements the auth and profile foundation phase. AI workout generation, exercise demos, workout player, rep counting, and adaptive coaching remain for later phases described in `plan.md`.

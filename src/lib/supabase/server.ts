@@ -1,4 +1,5 @@
-import { createClient } from "@supabase/supabase-js";
+import { cookies } from "next/headers";
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
 
 import { env, hasSupabaseConfig } from "@/lib/config/env";
 
@@ -7,10 +8,27 @@ export function createServerSupabaseClient() {
     return null;
   }
 
-  return createClient(env.supabaseUrl, env.supabaseAnonKey, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
+  const cookieStore = cookies();
+
+  return createServerClient(env.supabaseUrl, env.supabaseAnonKey, {
+    cookies: {
+      get(name: string) {
+        return cookieStore.get(name)?.value;
+      },
+      set(name: string, value: string, options: CookieOptions) {
+        try {
+          cookieStore.set({ name, value, ...options });
+        } catch {
+          // Server Components cannot set cookies. Middleware refreshes sessions.
+        }
+      },
+      remove(name: string, options: CookieOptions) {
+        try {
+          cookieStore.set({ name, value: "", ...options });
+        } catch {
+          // Server Components cannot set cookies. Middleware refreshes sessions.
+        }
+      },
     },
   });
 }

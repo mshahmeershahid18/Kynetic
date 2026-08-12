@@ -10,24 +10,27 @@ export function SiteHeader() {
           Kynetic
         </Link>
         <nav className="hidden items-center gap-6 text-sm font-medium text-muted-foreground md:flex">
-          <a className="transition hover:text-foreground" href="#features">
+          <Link className="transition hover:text-foreground" href="/#features">
             Features
-          </a>
-          <a className="transition hover:text-foreground" href="#foundation">
-            Foundation
-          </a>
-          <a className="transition hover:text-foreground" href="#contact">
-            Updates
-          </a>
+          </Link>
+          <Link className="transition hover:text-foreground" href="/onboarding">
+            Onboarding
+          </Link>
+          <Link className="transition hover:text-foreground" href="/dashboard">
+            Dashboard
+          </Link>
         </nav>
         <div className="flex items-center gap-3">
           <ThemeToggle />
-          <a
+          <Link className="hidden rounded-full border border-border px-4 py-2 text-sm font-bold transition hover:border-primary/60 sm:inline-flex" href="/auth/login">
+            Sign in
+          </Link>
+          <Link
             className="focus-ring rounded-full bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-glow transition hover:scale-[1.02]"
-            href="#contact"
+            href="/auth/signup"
           >
-            Join waitlist
-          </a>
+            Get started
+          </Link>
         </div>
       </div>
     </header>

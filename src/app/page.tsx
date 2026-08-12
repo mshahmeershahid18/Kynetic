@@ -10,9 +10,9 @@ const features = [
 ];
 
 const foundation = [
-  { label: "Next.js", status: "App Router + TypeScript ready" },
-  { label: "Supabase", status: "Client wiring and env guard ready" },
-  { label: "FastAPI", status: "Health and placeholder generate endpoints" },
+  { label: "Auth", status: "Email/password and Google OAuth routes" },
+  { label: "Profiles", status: "Onboarding profile writes to Supabase" },
+  { label: "Dashboard", status: "Protected profile, progress, and next actions" },
   { label: "Theme", status: "System-aware dark/light tokens" },
 ];
 
@@ -29,7 +29,7 @@ export default async function Home() {
           <div className="container-shell grid items-center gap-12 lg:grid-cols-[1.1fr_0.9fr]">
             <div>
               <p data-animate className="mb-5 inline-flex rounded-full border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-bold text-primary">
-                Project foundation live
+                Auth and profile foundation live
               </p>
               <h1 data-animate className="max-w-4xl text-5xl font-black tracking-tight sm:text-6xl lg:text-7xl">
                 Your AI fitness coach that sees progress, not excuses.
@@ -38,11 +38,11 @@ export default async function Home() {
                 Kynetic is being built as a personalized training companion: profile-aware workouts, avatar progress, exercise demos, private browser rep counting, and adaptive coaching.
               </p>
               <div data-animate className="mt-9 flex flex-col gap-3 sm:flex-row">
-                <a href="#contact" className="focus-ring rounded-full bg-primary px-6 py-3 text-center font-bold text-primary-foreground shadow-glow transition hover:scale-[1.02]">
-                  Get launch updates
+                <a href="/auth/signup" className="focus-ring rounded-full bg-primary px-6 py-3 text-center font-bold text-primary-foreground shadow-glow transition hover:scale-[1.02]">
+                  Create your profile
                 </a>
-                <a href="#foundation" className="focus-ring rounded-full border border-border bg-card px-6 py-3 text-center font-bold transition hover:border-primary/60">
-                  View foundation
+                <a href="/auth/login" className="focus-ring rounded-full border border-border bg-card px-6 py-3 text-center font-bold transition hover:border-primary/60">
+                  Sign in
                 </a>
               </div>
             </div>
@@ -87,10 +87,10 @@ export default async function Home() {
       <section id="foundation" className="border-y border-border/60 bg-muted/40 py-20">
         <div className="container-shell grid gap-8 lg:grid-cols-[0.8fr_1.2fr]">
           <div>
-            <p className="font-bold text-primary">Phase 0 status</p>
-            <h2 className="mt-3 text-3xl font-black tracking-tight">Runnable, themed, and service-ready.</h2>
+            <p className="font-bold text-primary">Phase 2 status</p>
+            <h2 className="mt-3 text-3xl font-black tracking-tight">Authenticated, personalized, and dashboard-ready.</h2>
             <p className="mt-4 text-muted-foreground">
-              Later phases can extend this app with auth, onboarding, AI generation, workout playback, and computer vision without reworking the base structure.
+              Users can sign up, complete a fitness profile, and reach a protected dashboard that is ready for AI workout generation in the next phase.
             </p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
