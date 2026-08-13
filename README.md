@@ -1,5 +1,7 @@
 # Kynetic
 
+**[🔴 Live Demo: kynetic-app.vercel.app](https://kynetic-app.vercel.app/)**
+
 An AI-powered fitness coach. Kynetic builds a personalized profile and 3D avatar,
 generates workouts with Google Gemini, coaches simple exercises live through your
 webcam, checks your form from uploaded video, and adapts future sessions to how
