@@ -8,6 +8,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { supportsVision } from "@/lib/vision/exercise-analyzers";
 import type { AiFeedbackRecord, WorkoutPlanRecord } from "@/lib/workouts/types";
 import { ConfigNotice } from "@/components/layout/config-notice"
+import { Reveal } from "@/components/motion/reveal"
 
 export const dynamic = "force-dynamic";
 
@@ -60,7 +61,7 @@ export default async function WorkoutPlanPage({
 
   return (
     <main className="min-h-screen bg-muted/20 pb-16 pt-8">
-      <div className="container-shell max-w-4xl space-y-6">
+      <Reveal className="container-shell max-w-4xl space-y-6">
         <Link
           href="/dashboard"
           className="focus-ring inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3.5 py-2 text-sm font-medium transition hover:bg-muted"
@@ -208,7 +209,7 @@ export default async function WorkoutPlanPage({
             </div>
           </Panel>
         ) : null}
-      </div>
+      </Reveal>
     </main>
   );
 }

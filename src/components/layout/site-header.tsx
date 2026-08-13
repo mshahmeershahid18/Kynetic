@@ -1,7 +1,8 @@
 import Link from "next/link";
 
-import { signOut } from "@/app/auth/actions";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { UserMenu } from "@/components/layout/user-menu";
+import { resolveProfilePhoto, providerFullName } from "@/lib/profiles/photo";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export async function SiteHeader() {
@@ -10,27 +11,33 @@ export async function SiteHeader() {
     data: { user },
   } = (await supabase?.auth.getUser()) ?? { data: { user: null } };
 
+  // Only the two fields the menu renders — the header is on every page, so it
+  // stays a narrow query rather than select('*').
+  const { data: profile } = user
+    ? await supabase!.from("profiles").select("full_name, avatar_url").eq("id", user.id).single()
+    : { data: null };
+
+  const name = profile?.full_name ?? providerFullName(user);
+  const photoUrl = resolveProfilePhoto(profile?.avatar_url, user);
+
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-xl">
       <div className="container-shell flex h-16 items-center justify-between gap-4">
-        <div className="flex items-center gap-8">
-          <Link href={user ? "/dashboard" : "/"} className="focus-ring rounded-md text-lg font-semibold tracking-tight">
+        <div className="flex items-center gap-4">
+          {user ? <UserMenu name={name} email={user.email ?? null} photoUrl={photoUrl} /> : null}
+
+          <Link
+            href={user ? "/dashboard" : "/"}
+            className="focus-ring rounded-md text-lg font-semibold tracking-tight"
+          >
             Kynetic
           </Link>
 
-          <nav className="hidden items-center gap-6 text-sm text-muted-foreground md:flex">
+          <nav className="hidden items-center gap-6 pl-4 text-sm text-muted-foreground md:flex">
             {user ? (
-              <>
-                <Link className="transition hover:text-foreground" href="/dashboard">
-                  Dashboard
-                </Link>
-                <Link className="transition hover:text-foreground" href="/form-check">
-                  Form check
-                </Link>
-                <Link className="transition hover:text-foreground" href="/settings">
-                  Settings
-                </Link>
-              </>
+              <Link className="transition hover:text-foreground" href="/form-check">
+                Form check
+              </Link>
             ) : (
               <Link className="transition hover:text-foreground" href="/#features">
                 Features
@@ -41,16 +48,7 @@ export async function SiteHeader() {
 
         <div className="flex items-center gap-2">
           <ThemeToggle />
-          {user ? (
-            <form action={signOut}>
-              <button
-                type="submit"
-                className="focus-ring rounded-lg border border-border px-3.5 py-2 text-sm font-medium transition hover:bg-muted"
-              >
-                Sign out
-              </button>
-            </form>
-          ) : (
+          {user ? null : (
             <>
               <Link
                 className="focus-ring hidden rounded-lg px-3.5 py-2 text-sm font-medium text-muted-foreground transition hover:text-foreground sm:inline-flex"

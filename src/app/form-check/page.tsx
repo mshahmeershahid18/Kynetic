@@ -7,6 +7,7 @@ import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { visionLabel } from '@/lib/vision/exercise-analyzers'
 import type { FormAnalysisRecord } from '@/lib/workouts/types'
 import { ConfigNotice } from '@/components/layout/config-notice'
+import { Reveal } from '@/components/motion/reveal'
 
 export const metadata = {
   title: 'Form check · Kynetic',
@@ -36,7 +37,7 @@ export default async function FormCheckPage() {
 
   return (
     <main className="min-h-screen bg-muted/20 pb-20 pt-8">
-      <div className="container-shell max-w-3xl">
+      <Reveal className="container-shell max-w-3xl">
         <Link
           href="/dashboard"
           className="focus-ring inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3.5 py-2 text-sm font-medium transition hover:bg-muted"
@@ -45,7 +46,7 @@ export default async function FormCheckPage() {
           Dashboard
         </Link>
 
-        <header className="mb-8 mt-6">
+        <header className="mb-8 mt-6" data-animate>
           <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Form check</h1>
           <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">
             Not in the mood for a live session? Film one set, upload it here, and Kynetic
@@ -54,9 +55,11 @@ export default async function FormCheckPage() {
           </p>
         </header>
 
-        <FormCheckClient />
+        <div data-animate>
+          <FormCheckClient />
+        </div>
 
-        <section className="mt-10">
+        <section className="mt-10" data-animate>
           <h2 className="text-sm font-semibold">Recent form checks</h2>
           {history.length ? (
             <ul className="mt-4 space-y-2">
@@ -101,7 +104,7 @@ export default async function FormCheckPage() {
             </div>
           )}
         </section>
-      </div>
+      </Reveal>
     </main>
   )
 }

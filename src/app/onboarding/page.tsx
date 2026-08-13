@@ -4,6 +4,7 @@ import { OnboardingForm } from '@/components/onboarding/onboarding-form'
 import type { FitnessProfile } from '@/lib/profiles/types'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { ConfigNotice } from '@/components/layout/config-notice'
+import { Reveal } from '@/components/motion/reveal'
 
 export const metadata = {
   title: 'Set up your profile · Kynetic',
@@ -29,8 +30,8 @@ export default async function OnboardingPage() {
 
   return (
     <main className="min-h-screen bg-muted/20 px-4 py-12">
-      <div className="mx-auto max-w-2xl">
-        <header className="mb-8 text-center">
+      <Reveal className="mx-auto max-w-2xl">
+        <header className="mb-8 text-center" data-animate>
           <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
             Set up your profile
           </h1>
@@ -40,8 +41,10 @@ export default async function OnboardingPage() {
           </p>
         </header>
 
-        <OnboardingForm profile={profile} email={user.email ?? null} />
-      </div>
+        <div data-animate>
+          <OnboardingForm profile={profile} email={user.email ?? null} />
+        </div>
+      </Reveal>
     </main>
   )
 }

@@ -2,6 +2,8 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { Activity, Camera, Sparkles } from 'lucide-react'
 
+import { Reveal } from '@/components/motion/reveal'
+
 const HIGHLIGHTS = [
   {
     icon: Sparkles,
@@ -41,17 +43,25 @@ export function AuthShell({
     <main className="grid min-h-[calc(100vh-4rem)] lg:grid-cols-2">
       {/* Form ------------------------------------------------------------- */}
       <div className="flex items-center justify-center px-5 py-12 sm:px-8">
-        <div className="w-full max-w-sm">
-          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            {eyebrow}
-          </p>
-          <h1 className="mt-2 text-2xl font-semibold tracking-tight">{title}</h1>
-          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{description}</p>
+        <Reveal className="w-full max-w-sm">
+          <div data-animate>
+            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              {eyebrow}
+            </p>
+            <h1 className="mt-2 text-2xl font-semibold tracking-tight">{title}</h1>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{description}</p>
+          </div>
 
-          <div className="mt-7 space-y-5">{children}</div>
+          <div className="mt-7 space-y-5" data-animate>
+            {children}
+          </div>
 
-          {footer ? <div className="mt-6 text-sm text-muted-foreground">{footer}</div> : null}
-        </div>
+          {footer ? (
+            <div className="mt-6 text-sm text-muted-foreground" data-animate>
+              {footer}
+            </div>
+          ) : null}
+        </Reveal>
       </div>
 
       {/* Product summary -------------------------------------------------- */}

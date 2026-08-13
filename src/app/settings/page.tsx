@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 
 import { ConfigNotice } from '@/components/layout/config-notice'
+import { Reveal } from '@/components/motion/reveal'
 import { SettingsView } from '@/components/settings/settings-view'
 import { resolveProfilePhoto } from '@/lib/profiles/photo'
 import type { FitnessProfile } from '@/lib/profiles/types'
@@ -32,8 +33,8 @@ export default async function SettingsPage() {
 
   return (
     <main className="min-h-screen bg-muted/20 px-4 py-10">
-      <div className="container-shell max-w-5xl">
-        <header className="mb-8">
+      <Reveal className="container-shell max-w-5xl">
+        <header className="mb-8" data-animate>
           <Link
             href="/dashboard"
             className="focus-ring inline-flex items-center gap-2 rounded-md text-sm text-muted-foreground transition hover:text-foreground"
@@ -48,16 +49,18 @@ export default async function SettingsPage() {
           </p>
         </header>
 
-        <SettingsView
-          profile={profile}
-          email={user.email ?? null}
-          hasPassword={providers.includes('email')}
-          providers={providers}
-          userId={user.id}
-          photoUrl={photoUrl}
-          photoFromProvider={!profile.avatar_url && Boolean(photoUrl)}
-        />
-      </div>
+        <div data-animate>
+          <SettingsView
+            profile={profile}
+            email={user.email ?? null}
+            hasPassword={providers.includes('email')}
+            providers={providers}
+            userId={user.id}
+            photoUrl={photoUrl}
+            photoFromProvider={!profile.avatar_url && Boolean(photoUrl)}
+          />
+        </div>
+      </Reveal>
     </main>
   )
 }
