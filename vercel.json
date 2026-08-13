@@ -1,0 +1,27 @@
+{
+  "services": {
+    "frontend": {
+      "root": ".",
+      "framework": "nextjs"
+    },
+    "ai": {
+      "root": "services/ai"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/ai/(.*)?",
+      "destination": {
+        "type": "service",
+        "service": "ai"
+      }
+    },
+    {
+      "source": "/(.*)",
+      "destination": {
+        "type": "service",
+        "service": "frontend"
+      }
+    }
+  ]
+}

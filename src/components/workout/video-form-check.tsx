@@ -15,7 +15,7 @@ import {
   type VisionKind,
 } from '@/lib/vision/exercise-analyzers'
 import { createPoseLandmarkerWithFallback, drawSkeleton } from '@/lib/vision/pose-landmarker'
-import { analyzeVideoWithAI } from '@/lib/ai-service'
+import { analyzeVideoWithAI } from '@/lib/ai-client'
 import { createBrowserSupabaseClient } from '@/lib/supabase/client'
 
 const MAX_FILE_BYTES = 100 * 1024 * 1024 // 100 MB
@@ -149,20 +149,59 @@ export function VideoFormCheck({ lockedKind, onComplete }: VideoFormCheckProps) 
         }
 
         const result = summarizeAnalysis(state)
-        setSummary(result)
-        setProgress(100)
-        setStatus('done')
         
         if (result.rep_count === 0) {
-          setAiFallbackAvailable(true)
-        }
-
-        if (onComplete && result.rep_count > 0) {
-          setSaving(true)
+          // Auto-trigger AI fallback
+          setAiAnalyzing(true)
           try {
-            await onComplete(kind, result)
+            const supabase = createBrowserSupabaseClient()
+            const sessionResponse = await supabase?.auth.getSession()
+            const token = sessionResponse?.data.session?.access_token || null
+            
+            const aiResult = await analyzeVideoWithAI(file, kind, token)
+            
+            if (aiResult?.summary) {
+              setSummary(aiResult.summary)
+              setProgress(100)
+              setStatus('done')
+              
+              if (onComplete) {
+                setSaving(true)
+                try {
+                  await onComplete(kind, aiResult.summary)
+                } finally {
+                  setSaving(false)
+                }
+              }
+            } else {
+              // AI failed, fallback to local zero reps
+              setSummary(result)
+              setProgress(100)
+              setStatus('done')
+              setAiFallbackAvailable(true)
+              setError('AI analysis failed. Please try again or record a better video.')
+            }
+          } catch (caught) {
+            setSummary(result)
+            setProgress(100)
+            setStatus('done')
+            setAiFallbackAvailable(true)
+            setError('An error occurred during AI analysis.')
           } finally {
-            setSaving(false)
+            setAiAnalyzing(false)
+          }
+        } else {
+          setSummary(result)
+          setProgress(100)
+          setStatus('done')
+
+          if (onComplete) {
+            setSaving(true)
+            try {
+              await onComplete(kind, result)
+            } finally {
+              setSaving(false)
+            }
           }
         }
       } catch (caught) {
@@ -343,7 +382,7 @@ export function VideoFormCheck({ lockedKind, onComplete }: VideoFormCheckProps) 
 
             {aiFallbackAvailable && !aiAnalyzing ? (
               <div className="mt-4 rounded-xl border border-primary/20 bg-primary/5 p-4">
-                <p className="text-sm font-medium text-foreground">Local tracking couldn't detect your reps.</p>
+                <p className="text-sm font-medium text-foreground">Local tracking couldn&apos;t detect your reps.</p>
                 <p className="mt-1 text-sm text-muted-foreground">
                   Our advanced AI coach can analyze this video in the cloud for a deeper form check.
                 </p>

@@ -18,7 +18,7 @@ import {
   drawSkeleton,
   type PoseLandmarkerLike,
 } from '@/lib/vision/pose-landmarker'
-import { analyzeVideoWithAI } from '@/lib/ai-service'
+import { analyzeVideoWithAI } from '@/lib/ai-client'
 import { createBrowserSupabaseClient } from '@/lib/supabase/client'
 
 export type LiveFormMetrics = AnalysisSummary & {
@@ -330,7 +330,7 @@ export function LiveFormCoach({ visionKind, exerciseName, active, onMetricsChang
 
       {aiFallbackAvailable && !aiAnalyzing && !aiSummary ? (
         <div className="border-t border-border bg-primary/5 px-5 py-4">
-          <p className="text-sm font-medium text-foreground">Local tracking didn't detect your reps.</p>
+          <p className="text-sm font-medium text-foreground">Local tracking didn&apos;t detect your reps.</p>
           <p className="mt-1 text-sm text-muted-foreground">
             We recorded a snippet of your session. Our AI coach can analyze it in the cloud.
           </p>
