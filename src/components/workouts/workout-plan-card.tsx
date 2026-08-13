@@ -4,9 +4,9 @@ import { CheckCircle2, Clock, Dumbbell, Flame, Sparkles } from "lucide-react";
 import { generateWorkoutAction } from "@/app/workouts/actions";
 import type { WorkoutPlanRecord, WorkoutSessionRecord } from "@/lib/workouts/types";
 
-export function GenerateWorkoutButton({ compact = false }: { compact?: boolean }) {
+export function GenerateWorkoutButton({ compact = false, pulse = false }: { compact?: boolean; pulse?: boolean }) {
   return (
-    <form action={generateWorkoutAction}>
+    <form action={generateWorkoutAction} className={pulse ? "animate-pulse" : ""}>
       <button
         type="submit"
         className={`focus-ring inline-flex shrink-0 items-center gap-2 rounded-lg bg-primary font-medium text-primary-foreground transition hover:opacity-90 ${
@@ -60,7 +60,7 @@ export function WorkoutHistory({ plans, sessions }: { plans: WorkoutPlanRecord[]
           Generate your first session from your profile. Kynetic saves it here so you can revisit it any time.
         </p>
         <div className="mt-5 flex justify-center">
-          <GenerateWorkoutButton />
+          <GenerateWorkoutButton pulse />
         </div>
       </div>
     );

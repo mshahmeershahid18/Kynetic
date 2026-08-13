@@ -76,9 +76,23 @@ function button(href: string, label: string) {
 
 export async function sendAuthEmail(
   to: string,
-  type: 'signup' | 'recovery',
+  type: 'signup' | 'recovery' | 'email_change',
   actionLink: string
 ) {
+  if (type === 'email_change') {
+    await deliver(
+      to,
+      'Confirm your new Kynetic email address',
+      layout(
+        'Confirm your new email',
+        `<p style="line-height:1.6;">Confirm this address to finish moving your Kynetic account to it. Until you do, your old address stays in use.</p>
+         ${button(actionLink, 'Confirm new email')}
+         <p style="font-size:13px;color:#71717a;line-height:1.6;">If you did not request this change, you can ignore this email.</p>`
+      )
+    )
+    return
+  }
+
   if (type === 'signup') {
     await deliver(
       to,

@@ -33,10 +33,35 @@ Python engine → local TypeScript generator. The `generator` column records whi
 one ran.
 
 ### 3D avatar
-A greyscale humanoid built with Three.js. Two continuous parameters drive it —
-body mass from BMI, muscularity from experience level — so the figure changes
-gradually as your profile changes rather than snapping between tiers. Auto-rotates,
-and can be dragged to orbit.
+A real human base mesh (24,461 vertices) rendered in greyscale with Three.js.
+
+There is exactly **one** source model, `FinalBaseMesh.obj`. Every body — male or
+female, at any BMI and any training level — is that same mesh reshaped at runtime
+by `src/lib/avatar/deform.ts`. An OBJ carries no blend shapes, so the reshaping is
+done by moving vertices according to which part of the body they belong to.
+
+Three continuous inputs drive it:
+
+- **mass** (from BMI) widens and deepens the abdomen most, hips and chest less,
+  head and extremities least — so a heavier figure reads as heavier rather than
+  uniformly scaled up.
+- **muscle** (from experience level) broadens the shoulders and upper back and
+  slightly narrows the waist. That contrast, not raw size, is what reads as trained.
+- **sex** applies female shaping on the same mesh: wider hips, narrower shoulders
+  and ribcage, a more defined waist, a bust, and slightly shorter stature.
+
+The anatomical landmarks (crotch, waist, shoulder joint, hand positions) were
+measured off the actual source mesh, so the deformation lands on the right body
+parts rather than on guessed heights. Region weights are smooth, so there are no
+seams where the arms meet the shoulders.
+
+The mesh is precompiled to a compact binary (2.5 MB of ASCII OBJ → 430 KB):
+
+```bash
+npm run build:avatar   # FinalBaseMesh.obj -> public/models/human-base.bin
+```
+
+Only re-run this if the source model changes; the output is committed.
 
 ### Live guidance (simple exercises only)
 Squats, push-ups, lunges, and glute bridges get real-time camera coaching: a

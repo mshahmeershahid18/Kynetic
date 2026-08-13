@@ -5,49 +5,21 @@ import { useFormState, useFormStatus } from 'react-dom'
 import { AlertCircle, ArrowLeft, ArrowRight, Check, Loader2 } from 'lucide-react'
 
 import { saveOnboardingProfile, type OnboardingState } from '@/app/onboarding/actions'
+import { CheckboxGroup, Field, RadioGroup, inputClass } from '@/components/forms/fields'
 import { calculateBmi, getBmiBucket } from '@/lib/profiles/avatar'
+import {
+  ACTIVITY_HELP,
+  EQUIPMENT_OPTIONS,
+  EXPERIENCE_HELP,
+  GENDER_OPTIONS,
+  PREFERENCE_OPTIONS,
+} from '@/lib/profiles/options'
 import {
   activityLevels,
   experienceLevels,
   fitnessGoals,
   type FitnessProfile,
 } from '@/lib/profiles/types'
-
-const EQUIPMENT = [
-  'Dumbbells',
-  'Barbell',
-  'Kettlebells',
-  'Resistance bands',
-  'Pull-up bar',
-  'Bench',
-  'Machines',
-  'Cardio machine',
-]
-
-const PREFERENCES = [
-  'Strength',
-  'Hypertrophy',
-  'HIIT',
-  'Low impact',
-  'Mobility',
-  'Home workouts',
-  'Gym workouts',
-]
-
-const ACTIVITY_HELP: Record<string, string> = {
-  sedentary: 'Mostly sitting, little deliberate movement',
-  light: 'Light activity or walking most days',
-  moderate: 'Regular exercise a few times a week',
-  high: 'Training hard most days of the week',
-  athlete: 'Structured training, competing or close to it',
-}
-
-const EXPERIENCE_HELP: Record<string, string> = {
-  none: 'Never trained with weights',
-  beginner: 'Under a year of consistent training',
-  intermediate: 'One to three years of training',
-  experienced: 'Three or more years of consistent training',
-}
 
 const STEPS = ['About you', 'Body metrics', 'Goal & experience', 'Training setup', 'Health & review']
 
@@ -80,7 +52,6 @@ export function OnboardingForm({ profile, email }: Props) {
   const [weight, setWeight] = useState(profile?.weight_kg ? String(profile.weight_kg) : '')
 
   const bmi = useMemo(() => calculateBmi(Number(height), Number(weight)), [height, weight])
-  const isEditing = Boolean(profile?.onboarding_completed)
 
   // Validation runs on the server, so an error can belong to a step the user
   // has already moved past. Jump back to the first one that failed, otherwise
@@ -134,7 +105,7 @@ export function OnboardingForm({ profile, email }: Props) {
         <div className="px-6 py-7 sm:px-8">
           <Step active={step === 0}>
             <Heading
-              title={isEditing ? 'Update your details' : 'Tell us about you'}
+              title="Tell us about you"
               description="We use this to size your training and keep it appropriate for you."
             />
             <Field label="Full name" error={fieldError('full_name')}>
@@ -164,10 +135,11 @@ export function OnboardingForm({ profile, email }: Props) {
                   defaultValue={profile?.gender ?? 'prefer-not-to-say'}
                   className={inputClass()}
                 >
-                  <option value="female">Female</option>
-                  <option value="male">Male</option>
-                  <option value="non-binary">Non-binary</option>
-                  <option value="prefer-not-to-say">Prefer not to say</option>
+                  {GENDER_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
                 </select>
               </Field>
             </div>
@@ -304,7 +276,7 @@ export function OnboardingForm({ profile, email }: Props) {
               name="equipment"
               label="Equipment you have"
               hint="Leave all unchecked for bodyweight only"
-              options={EQUIPMENT}
+              options={EQUIPMENT_OPTIONS}
               selected={profile?.equipment ?? []}
             />
 
@@ -312,7 +284,7 @@ export function OnboardingForm({ profile, email }: Props) {
               name="workout_preferences"
               label="Training styles you enjoy"
               hint="Optional"
-              options={PREFERENCES}
+              options={PREFERENCE_OPTIONS}
               selected={profile?.workout_preferences ?? []}
             />
           </Step>
@@ -372,7 +344,7 @@ export function OnboardingForm({ profile, email }: Props) {
               <ArrowRight className="h-4 w-4" />
             </button>
           ) : (
-            <SubmitButton editing={isEditing} />
+            <SubmitButton />
           )}
         </div>
       </form>
@@ -386,7 +358,7 @@ export function OnboardingForm({ profile, email }: Props) {
   )
 }
 
-function SubmitButton({ editing }: { editing: boolean }) {
+function SubmitButton() {
   const { pending } = useFormStatus()
   return (
     <button
@@ -395,7 +367,7 @@ function SubmitButton({ editing }: { editing: boolean }) {
       className="focus-ring inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-60"
     >
       {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-      {editing ? 'Save changes' : 'Complete setup'}
+      Complete setup
     </button>
   )
 }
@@ -414,118 +386,5 @@ function Heading({ title, description }: { title: string; description: string })
       <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
       <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{description}</p>
     </div>
-  )
-}
-
-function Field({
-  label,
-  hint,
-  error,
-  children,
-}: {
-  label: string
-  hint?: string
-  error?: string
-  children: React.ReactNode
-}) {
-  return (
-    <label className="block">
-      <span className="flex items-baseline justify-between gap-2">
-        <span className="text-sm font-medium">{label}</span>
-        {hint ? <span className="text-xs text-muted-foreground">{hint}</span> : null}
-      </span>
-      <span className="mt-1.5 block">{children}</span>
-      {error ? <span className="mt-1.5 block text-xs text-destructive">{error}</span> : null}
-    </label>
-  )
-}
-
-function inputClass(error?: string) {
-  return `w-full rounded-lg border bg-background px-3.5 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-primary/30 ${
-    error ? 'border-destructive' : 'border-border focus:border-primary'
-  }`
-}
-
-function RadioGroup({
-  name,
-  label,
-  options,
-  defaultValue,
-  error,
-}: {
-  name: string
-  label: string
-  options: Array<{ value: string; label: string; help?: string }>
-  defaultValue: string
-  error?: string
-}) {
-  return (
-    <fieldset>
-      <legend className="text-sm font-medium">{label}</legend>
-      <div className="mt-2 space-y-2">
-        {options.map((option) => (
-          <label
-            key={option.value}
-            className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-background px-4 py-3 transition hover:border-primary/50 has-[:checked]:border-primary has-[:checked]:bg-primary/5"
-          >
-            <input
-              type="radio"
-              name={name}
-              value={option.value}
-              defaultChecked={option.value === defaultValue}
-              className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
-            />
-            <span className="min-w-0">
-              <span className="block text-sm font-medium capitalize">{option.label}</span>
-              {option.help ? (
-                <span className="mt-0.5 block text-xs text-muted-foreground">{option.help}</span>
-              ) : null}
-            </span>
-          </label>
-        ))}
-      </div>
-      {error ? <p className="mt-1.5 text-xs text-destructive">{error}</p> : null}
-    </fieldset>
-  )
-}
-
-function CheckboxGroup({
-  name,
-  label,
-  hint,
-  options,
-  selected,
-}: {
-  name: string
-  label: string
-  hint?: string
-  options: string[]
-  selected: string[]
-}) {
-  const chosen = new Set(selected)
-  return (
-    <fieldset>
-      <legend className="flex w-full items-baseline justify-between gap-2">
-        <span className="text-sm font-medium">{label}</span>
-        {hint ? <span className="text-xs text-muted-foreground">{hint}</span> : null}
-      </legend>
-      <div className="mt-2 flex flex-wrap gap-2">
-        {options.map((option) => (
-          <label
-            key={option}
-            className="cursor-pointer rounded-lg border border-border bg-background px-3.5 py-2 text-sm transition hover:border-primary/50 has-[:checked]:border-primary has-[:checked]:bg-primary has-[:checked]:text-primary-foreground"
-          >
-            <input
-              type="checkbox"
-              name={name}
-              value={option}
-              defaultChecked={chosen.has(option)}
-              className="sr-only"
-            />
-            {option}
-          </label>
-        ))}
-      </div>
-    </fieldset>
   )
 }

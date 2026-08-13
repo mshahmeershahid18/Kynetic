@@ -3,36 +3,44 @@
 import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 
-import { buildFigure } from '@/lib/avatar/build-figure'
-import type { AvatarMorphs } from '@/lib/profiles/avatar'
+import {
+  computeBodyAxis,
+  deformBody,
+  statureScale,
+  type BodyAxis,
+  type BodyParams,
+} from '@/lib/avatar/deform'
+import { loadBaseMesh } from '@/lib/avatar/load-mesh'
 
 type Avatar3DProps = {
-  morphs: AvatarMorphs
+  params: BodyParams
   className?: string
 }
 
-/**
- * Greyscale 3D avatar.
- *
- * Renders with Three.js on a WebGL canvas, auto-rotates, and can be dragged to
- * orbit. The figure is rebuilt whenever the morph parameters change, so the
- * body visibly updates when BMI or experience level moves.
- */
-export function Avatar3D({ morphs, className }: Avatar3DProps) {
-  const mountRef = useRef<HTMLDivElement | null>(null)
-  const [failed, setFailed] = useState(false)
+type Status = 'loading' | 'ready' | 'error'
 
-  // Kept in refs so the render loop always sees current values without
-  // being torn down and rebuilt on every interaction.
-  const morphsRef = useRef(morphs)
-  const rotationRef = useRef(0)
+/**
+ * Renders the greyscale human avatar.
+ *
+ * A single base mesh is loaded once and reshaped on the CPU whenever the body
+ * parameters change. Deformation runs on a parameter change only — never per
+ * frame — so the render loop stays cheap.
+ */
+export function Avatar3D({ params, className }: Avatar3DProps) {
+  const mountRef = useRef<HTMLDivElement | null>(null)
+  const [status, setStatus] = useState<Status>('loading')
+  const [message, setMessage] = useState<string | null>(null)
+
+  // Live values the render loop reads without needing to be rebuilt.
+  const paramsRef = useRef(params)
+  const rotationRef = useRef(0.35)
   const draggingRef = useRef(false)
   const lastPointerRef = useRef(0)
   const autoRotateRef = useRef(true)
 
   useEffect(() => {
-    morphsRef.current = morphs
-  }, [morphs])
+    paramsRef.current = params
+  }, [params])
 
   useEffect(() => {
     const mount = mountRef.current
@@ -42,56 +50,61 @@ export function Avatar3D({ morphs, className }: Avatar3DProps) {
     try {
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
     } catch {
-      // No WebGL available (older device, blocked context) — show the fallback.
-      setFailed(true)
+      setStatus('error')
+      setMessage('Your browser could not start 3D rendering.')
       return
     }
 
+    let disposed = false
+    let frame = 0
+    let observer: ResizeObserver | null = null
+
     const scene = new THREE.Scene()
-    const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 100)
-    camera.position.set(0, 0.25, 4.6)
+    const camera = new THREE.PerspectiveCamera(30, 1, 0.05, 50)
+    camera.position.set(0, 0, 2)
     camera.lookAt(0, 0, 0)
 
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.shadowMap.enabled = true
     renderer.shadowMap.type = THREE.PCFSoftShadowMap
-    mount.appendChild(renderer.domElement)
-    renderer.domElement.style.width = '100%'
-    renderer.domElement.style.height = '100%'
-    renderer.domElement.style.touchAction = 'pan-y'
-    renderer.domElement.style.cursor = 'grab'
+    renderer.toneMapping = THREE.ACESFilmicToneMapping
+    renderer.toneMappingExposure = 1.05
 
-    // Neutral three-point lighting. Greyscale throughout: the only colour in
-    // the scene comes from the light intensities, which keeps the figure
-    // readable in both the light and dark app themes.
-    const key = new THREE.DirectionalLight(0xffffff, 2.1)
-    key.position.set(2.6, 4, 3.4)
+    const canvas = renderer.domElement
+    // Sized in explicit pixels by resize() below — a percentage height here
+    // collapses whenever the ancestor chain has no resolvable height, which
+    // leaves the canvas shorter than the card and clips the figure.
+    canvas.style.position = 'absolute'
+    canvas.style.inset = '0'
+    canvas.style.display = 'block'
+    canvas.style.touchAction = 'pan-y'
+    canvas.style.cursor = 'grab'
+    mount.appendChild(canvas)
+
+    // --- Lighting: neutral greys only, so the figure reads the same in both
+    // app themes and never picks up a colour cast.
+    const key = new THREE.DirectionalLight(0xffffff, 2.4)
+    key.position.set(1.4, 2.2, 2.0)
     key.castShadow = true
     key.shadow.mapSize.set(1024, 1024)
     key.shadow.camera.near = 0.5
-    key.shadow.camera.far = 20
+    key.shadow.camera.far = 8
     scene.add(key)
 
-    const fill = new THREE.DirectionalLight(0xffffff, 0.75)
-    fill.position.set(-3.4, 1.4, 2)
+    const fill = new THREE.DirectionalLight(0xffffff, 0.85)
+    fill.position.set(-2.2, 0.7, 1.4)
     scene.add(fill)
 
-    const rim = new THREE.DirectionalLight(0xffffff, 1.15)
-    rim.position.set(-1.2, 2.2, -3.6)
+    const rim = new THREE.DirectionalLight(0xffffff, 1.5)
+    rim.position.set(-0.8, 1.6, -2.4)
     scene.add(rim)
 
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x2a2a2a, 0.75))
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x1a1a1a, 0.55))
 
     const pivot = new THREE.Group()
     scene.add(pivot)
 
-    let figure = buildFigure(morphsRef.current)
-    pivot.add(figure.group)
-    let renderedMorphs = morphsRef.current
-
-    // -- Interaction ---------------------------------------------------------
-    const canvas = renderer.domElement
-
+    // --- Interaction --------------------------------------------------------
     const onPointerDown = (event: PointerEvent) => {
       draggingRef.current = true
       autoRotateRef.current = false
@@ -99,22 +112,21 @@ export function Avatar3D({ morphs, className }: Avatar3DProps) {
       canvas.setPointerCapture(event.pointerId)
       canvas.style.cursor = 'grabbing'
     }
-
     const onPointerMove = (event: PointerEvent) => {
       if (!draggingRef.current) return
-      rotationRef.current += (event.clientX - lastPointerRef.current) * 0.01
+      rotationRef.current += (event.clientX - lastPointerRef.current) * 0.011
       lastPointerRef.current = event.clientX
     }
-
     const endDrag = (event: PointerEvent) => {
       if (!draggingRef.current) return
       draggingRef.current = false
-      canvas.releasePointerCapture(event.pointerId)
+      if (canvas.hasPointerCapture(event.pointerId)) {
+        canvas.releasePointerCapture(event.pointerId)
+      }
       canvas.style.cursor = 'grab'
-      // Resume the idle spin shortly after the user lets go.
       window.setTimeout(() => {
         if (!draggingRef.current) autoRotateRef.current = true
-      }, 2500)
+      }, 3000)
     }
 
     canvas.addEventListener('pointerdown', onPointerDown)
@@ -122,75 +134,198 @@ export function Avatar3D({ morphs, className }: Avatar3DProps) {
     canvas.addEventListener('pointerup', endDrag)
     canvas.addEventListener('pointercancel', endDrag)
 
-    // -- Sizing --------------------------------------------------------------
-    const resize = () => {
-      const { clientWidth, clientHeight } = mount
-      if (!clientWidth || !clientHeight) return
-      renderer.setSize(clientWidth, clientHeight, false)
-      camera.aspect = clientWidth / clientHeight
+    // --- Framing ------------------------------------------------------------
+    // The figure is centred on the origin and the camera pulls back just far
+    // enough to hold it, so it fills whatever height the card happens to have
+    // and never clips as it spins.
+    const MARGIN = 1.06
+    let fitHeight = 1
+    let fitRadius = 0.3
+    let viewWidth = 0
+    let viewHeight = 0
+
+    const frameCamera = () => {
+      if (!viewWidth || !viewHeight) return
+
+      camera.aspect = viewWidth / viewHeight
+      const vFov = (camera.fov * Math.PI) / 180
+      const hFov = 2 * Math.atan(Math.tan(vFov / 2) * camera.aspect)
+
+      const distanceForHeight = fitHeight / 2 / Math.tan(vFov / 2)
+      const distanceForWidth = fitRadius / Math.tan(hFov / 2)
+
+      // The extra radius clears the half of the figure nearest the camera.
+      camera.position.set(0, 0, Math.max(distanceForHeight, distanceForWidth) + fitRadius)
+      camera.lookAt(0, 0, 0)
       camera.updateProjectionMatrix()
     }
-    resize()
 
-    const observer = new ResizeObserver(resize)
-    observer.observe(mount)
+    // Measured rather than read from clientWidth/clientHeight so the canvas
+    // always matches the box the card actually gives us.
+    const resize = () => {
+      const rect = mount.getBoundingClientRect()
+      const width = Math.round(rect.width)
+      const height = Math.round(rect.height)
+      if (!width || !height) return
+      if (width === viewWidth && height === viewHeight) return
 
-    // -- Render loop ---------------------------------------------------------
-    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    let frame = 0
-
-    const animate = () => {
-      frame = requestAnimationFrame(animate)
-
-      // Rebuild only when the shape parameters actually change.
-      const next = morphsRef.current
-      if (next.mass !== renderedMorphs.mass || next.muscle !== renderedMorphs.muscle) {
-        pivot.remove(figure.group)
-        figure.dispose()
-        figure = buildFigure(next)
-        pivot.add(figure.group)
-        renderedMorphs = next
-      }
-
-      if (autoRotateRef.current && !prefersReducedMotion) {
-        rotationRef.current += 0.004
-      }
-      pivot.rotation.y = rotationRef.current
-
-      renderer.render(scene, camera)
+      viewWidth = width
+      viewHeight = height
+      renderer.setSize(width, height, true)
+      frameCamera()
     }
-    animate()
+
+    // --- Build once the mesh arrives ---------------------------------------
+    let geometry: THREE.BufferGeometry | null = null
+    let material: THREE.MeshStandardMaterial | null = null
+    let groundGeometry: THREE.BufferGeometry | null = null
+    let groundMaterial: THREE.Material | null = null
+
+    loadBaseMesh()
+      .then((mesh) => {
+        if (disposed) return
+
+        const base = mesh.positions
+        const working = new Float32Array(base.length)
+        const axis: BodyAxis = computeBodyAxis(base)
+
+        geometry = new THREE.BufferGeometry()
+        geometry.setAttribute('position', new THREE.BufferAttribute(working, 3))
+        geometry.setIndex(new THREE.BufferAttribute(mesh.indices, 1))
+
+        material = new THREE.MeshStandardMaterial({
+          color: 0xb9b9b9,
+          roughness: 0.68,
+          metalness: 0.04,
+        })
+
+        const body = new THREE.Mesh(geometry, material)
+        body.castShadow = true
+        body.receiveShadow = true
+        pivot.add(body)
+
+        // Soft contact shadow so the figure is grounded rather than floating.
+        groundGeometry = new THREE.CircleGeometry(1, 48)
+        groundMaterial = new THREE.ShadowMaterial({ opacity: 0.22 })
+        const ground = new THREE.Mesh(groundGeometry, groundMaterial)
+        ground.rotation.x = -Math.PI / 2
+        ground.receiveShadow = true
+        scene.add(ground)
+
+        let applied: BodyParams | null = null
+
+        const applyParams = (next: BodyParams) => {
+          deformBody(base, working, axis, next)
+          geometry!.attributes.position.needsUpdate = true
+          geometry!.computeVertexNormals()
+          geometry!.computeBoundingSphere()
+          geometry!.computeBoundingBox()
+          const stature = statureScale(next.sex)
+          body.scale.set(1, stature, 1)
+
+          // Re-centre and re-frame from the deformed bounds — the mesh's own
+          // size and origin are whatever the source model happened to use.
+          const box = geometry!.boundingBox!
+          const height = (box.max.y - box.min.y) * stature
+          const radius = Math.max(
+            Math.abs(box.min.x),
+            Math.abs(box.max.x),
+            Math.abs(box.min.z),
+            Math.abs(box.max.z)
+          )
+
+          body.position.y = -((box.min.y + box.max.y) / 2) * stature
+          ground.position.y = -height / 2
+          ground.scale.setScalar(Math.max(radius * 1.15, 0.05))
+
+          fitHeight = height * MARGIN
+          fitRadius = radius * MARGIN
+          frameCamera()
+
+          applied = next
+        }
+
+        applyParams(paramsRef.current)
+        resize()
+        observer = new ResizeObserver(resize)
+        observer.observe(mount)
+        setStatus('ready')
+
+        const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+        let sizeTick = 0
+
+        const animate = () => {
+          frame = requestAnimationFrame(animate)
+
+          // ResizeObserver covers container changes; this catches the layout
+          // settling after fonts, images, or the dashboard grid land.
+          sizeTick += 1
+          if (sizeTick % 30 === 0) resize()
+
+          const next = paramsRef.current
+          if (
+            !applied ||
+            applied.mass !== next.mass ||
+            applied.muscle !== next.muscle ||
+            applied.sex !== next.sex
+          ) {
+            applyParams(next)
+          }
+
+          if (autoRotateRef.current && !reduceMotion) {
+            rotationRef.current += 0.0035
+          }
+          pivot.rotation.y = rotationRef.current
+
+          renderer.render(scene, camera)
+        }
+        animate()
+      })
+      .catch((error: unknown) => {
+        if (disposed) return
+        setStatus('error')
+        setMessage(error instanceof Error ? error.message : 'Could not load the avatar.')
+      })
 
     return () => {
-      cancelAnimationFrame(frame)
-      observer.disconnect()
+      disposed = true
+      if (frame) cancelAnimationFrame(frame)
+      observer?.disconnect()
       canvas.removeEventListener('pointerdown', onPointerDown)
       canvas.removeEventListener('pointermove', onPointerMove)
       canvas.removeEventListener('pointerup', endDrag)
       canvas.removeEventListener('pointercancel', endDrag)
-      figure.dispose()
+      geometry?.dispose()
+      material?.dispose()
+      groundGeometry?.dispose()
+      groundMaterial?.dispose()
       renderer.dispose()
       if (canvas.parentNode === mount) mount.removeChild(canvas)
     }
-    // Built once; morph updates flow through the ref inside the loop.
+    // Built once; parameter changes flow through paramsRef inside the loop.
   }, [])
 
-  if (failed) {
-    return (
-      <div className={`grid place-items-center rounded-3xl bg-muted p-6 text-center ${className ?? ''}`}>
-        <p className="text-sm text-muted-foreground">
-          Your browser could not start 3D rendering, so the avatar is unavailable here.
-        </p>
-      </div>
-    )
-  }
-
   return (
-    <div
-      ref={mountRef}
-      className={className}
-      role="img"
-      aria-label="Three-dimensional greyscale figure reflecting your current body composition and training level. Drag to rotate."
-    />
+    <div className={className || 'relative'}>
+      <div
+        ref={mountRef}
+        className="absolute inset-0"
+        role="img"
+        aria-label="Three-dimensional figure reflecting your body composition and training level. Drag to rotate."
+      />
+
+      {status === 'loading' ? (
+        <div className="absolute inset-0 grid place-items-center">
+          <div className="h-32 w-10 animate-pulse rounded-full bg-muted-foreground/15" />
+        </div>
+      ) : null}
+
+      {status === 'error' ? (
+        <div className="absolute inset-0 grid place-items-center px-6 text-center">
+          <p className="text-sm text-muted-foreground">{message}</p>
+        </div>
+      ) : null}
+    </div>
   )
 }

@@ -1,3 +1,4 @@
+import type { Sex } from "@/lib/avatar/deform";
 import type { ExperienceLevel } from "@/lib/profiles/types";
 
 export const bmiBuckets = ["underweight", "normal", "overweight", "obese"] as const;
@@ -50,13 +51,21 @@ export function parseAvatarState(avatarState: string | null): {
  * whose proportions move smoothly. This is the parametric route — BMI drives
  * mass and experience drives muscularity, so the body changes gradually as the
  * profile changes rather than snapping between tiers.
+ *
+ * The values are consumed by src/lib/avatar/deform.ts, which reshapes the
+ * shared human base mesh.
  */
 export type AvatarMorphs = {
   /** 0 = very lean, 1 = high body mass. */
   mass: number;
   /** 0 = untrained, 1 = well developed musculature. */
   muscle: number;
+  /** Which body the base mesh is shaped toward. */
+  sex: BodySex;
 };
+
+/** Re-exported so callers do not need to reach into the renderer internals. */
+export type BodySex = Sex;
 
 const EXPERIENCE_MUSCLE: Record<ExperienceLevel, number> = {
   none: 0.05,
@@ -65,15 +74,26 @@ const EXPERIENCE_MUSCLE: Record<ExperienceLevel, number> = {
   experienced: 0.92,
 };
 
+/**
+ * Non-binary and undisclosed profiles render on the unmodified base mesh.
+ * It is a rendering default, not a classification of the person.
+ */
+export function resolveBodySex(gender: string | null | undefined): BodySex {
+  const value = (gender ?? "").trim().toLowerCase();
+  if (value === "female" || value === "woman" || value === "f") return "female";
+  return "male";
+}
+
 export function avatarMorphs(
   bmi: number | null,
-  experience: ExperienceLevel | null
+  experience: ExperienceLevel | null,
+  gender: string | null | undefined = null
 ): AvatarMorphs {
   // Map a realistic BMI span (16-38) onto 0-1 and clamp the extremes.
   const value = bmi ?? 22;
   const mass = Math.max(0, Math.min(1, (value - 16) / 22));
   const muscle = EXPERIENCE_MUSCLE[experience ?? "none"] ?? 0.05;
-  return { mass, muscle };
+  return { mass, muscle, sex: resolveBodySex(gender) };
 }
 
 const BUCKET_COPY: Record<BmiBucket | "unknown", string> = {

@@ -11,71 +11,19 @@ import {
   type ActivityLevel,
   type ExperienceLevel,
 } from "@/lib/profiles/types";
+import {
+  boundedNumber,
+  multi,
+  oneOf,
+  text,
+  type FieldErrors,
+} from "@/lib/profiles/validate";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export type OnboardingState = {
   error?: string;
-  fieldErrors?: Record<string, string>;
+  fieldErrors?: FieldErrors;
 };
-
-function text(formData: FormData, key: string) {
-  const value = formData.get(key);
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function multi(formData: FormData, key: string) {
-  return formData
-    .getAll(key)
-    .filter((value): value is string => typeof value === "string" && value.trim().length > 0);
-}
-
-/**
- * Validates a numeric field against the same bounds the database enforces.
- * Catching these here turns a raw Postgres constraint violation into a
- * readable message on the right field.
- */
-function boundedNumber(
-  formData: FormData,
-  key: string,
-  { min, max, label }: { min: number; max: number; label: string },
-  errors: Record<string, string>
-): number | null {
-  const raw = text(formData, key);
-  if (!raw) {
-    errors[key] = `${label} is required.`;
-    return null;
-  }
-
-  const value = Number(raw);
-  if (!Number.isFinite(value)) {
-    errors[key] = `${label} must be a number.`;
-    return null;
-  }
-  if (value < min || value > max) {
-    errors[key] = `${label} must be between ${min} and ${max}.`;
-    return null;
-  }
-  return value;
-}
-
-function oneOf<T extends readonly string[]>(
-  formData: FormData,
-  key: string,
-  allowed: T,
-  label: string,
-  errors: Record<string, string>
-): T[number] | null {
-  const value = text(formData, key);
-  if (!value) {
-    errors[key] = `${label} is required.`;
-    return null;
-  }
-  if (!(allowed as readonly string[]).includes(value)) {
-    errors[key] = `Choose a valid ${label.toLowerCase()}.`;
-    return null;
-  }
-  return value as T[number];
-}
 
 export async function saveOnboardingProfile(
   _previous: OnboardingState,
@@ -95,27 +43,16 @@ export async function saveOnboardingProfile(
     redirect("/auth/login?message=Please%20sign%20in%20to%20continue");
   }
 
-  const fieldErrors: Record<string, string> = {};
+  const fieldErrors: FieldErrors = {};
 
   const fullName = text(formData, "full_name");
   if (!fullName) fieldErrors.full_name = "Your name is required.";
 
-  // Bounds mirror the CHECK constraints in supabase/schema.sql.
-  const age = boundedNumber(formData, "age", { min: 13, max: 100, label: "Age" }, fieldErrors);
-  const heightCm = boundedNumber(formData, "height_cm", { min: 90, max: 250, label: "Height" }, fieldErrors);
-  const weightKg = boundedNumber(formData, "weight_kg", { min: 25, max: 350, label: "Weight" }, fieldErrors);
-  const days = boundedNumber(
-    formData,
-    "available_days_per_week",
-    { min: 1, max: 7, label: "Training days" },
-    fieldErrors
-  );
-  const minutes = boundedNumber(
-    formData,
-    "preferred_session_minutes",
-    { min: 10, max: 180, label: "Session length" },
-    fieldErrors
-  );
+  const age = boundedNumber(formData, "age", fieldErrors);
+  const heightCm = boundedNumber(formData, "height_cm", fieldErrors);
+  const weightKg = boundedNumber(formData, "weight_kg", fieldErrors);
+  const days = boundedNumber(formData, "available_days_per_week", fieldErrors);
+  const minutes = boundedNumber(formData, "preferred_session_minutes", fieldErrors);
 
   const goal = oneOf(formData, "goal", fitnessGoals, "Goal", fieldErrors);
   const fitnessLevel = oneOf(formData, "fitness_level", activityLevels, "Activity level", fieldErrors);

@@ -14,13 +14,19 @@ Email/password and Google OAuth via Supabase Auth, middleware route protection,
 password reset, Nodemailer welcome email, and a multi-step onboarding flow that
 computes BMI and resolves the avatar state.
 
-**Avatar is now a real 3D model.** `src/lib/avatar/build-figure.ts` assembles a
-greyscale humanoid in Three.js whose proportions are driven by two continuous
-parameters — body mass from BMI, muscularity from experience level. It is
-rendered by `src/components/dashboard/avatar-3d.tsx` with three-point lighting,
-idle rotation, and drag-to-orbit. Because the inputs are continuous, a small
-weight change visibly changes the figure rather than waiting for a bucket
-boundary. This is the parametric option `plan.md` described, not the asset matrix.
+**Avatar is a real human mesh.** `FinalBaseMesh.obj` (24,461 vertices) is
+precompiled to a 430 KB binary by `scripts/build-avatar-mesh.mjs` and reshaped at
+runtime by `src/lib/avatar/deform.ts`. One mesh serves every body: mass from BMI,
+muscularity from experience, and female shaping are all vertex deformations
+applied to the same source geometry, with anatomical landmarks measured off the
+model itself. Rendered by `src/components/dashboard/avatar-3d.tsx` with
+three-point neutral lighting, a contact shadow, idle rotation, and drag-to-orbit.
+This is the parametric option `plan.md` described, not the asset matrix.
+
+Verified with a headless harness that measures hip, waist, chest, and shoulder
+widths across eight body configurations: mass widens and deepens the waist,
+training raises the shoulder-to-waist ratio, mass lowers it, and the female form
+carries a higher hip-to-waist ratio with narrower shoulders.
 
 ## Phase 2 — Workout system (Complete)
 **Generation is Gemini-backed.** `services/ai/gemini_client.py` prompts Gemini

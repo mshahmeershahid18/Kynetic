@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "format": "prettier --check ."
+    "format": "prettier --check .",
+    "build:avatar": "node scripts/build-avatar-mesh.mjs"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^1.0.1",

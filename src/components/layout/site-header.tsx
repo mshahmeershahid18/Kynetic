@@ -27,8 +27,8 @@ export async function SiteHeader() {
                 <Link className="transition hover:text-foreground" href="/form-check">
                   Form check
                 </Link>
-                <Link className="transition hover:text-foreground" href="/onboarding">
-                  Profile
+                <Link className="transition hover:text-foreground" href="/settings">
+                  Settings
                 </Link>
               </>
             ) : (
