@@ -351,7 +351,7 @@ export function OnboardingForm({ profile, email }: Props) {
 
       {step < STEPS.length - 1 ? (
         <p className="mt-4 text-center text-sm text-muted-foreground">
-          You can change any of this later from your dashboard.
+          You can change any of this later in Settings.
         </p>
       ) : null}
     </div>
