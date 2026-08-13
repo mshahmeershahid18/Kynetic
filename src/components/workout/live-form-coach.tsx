@@ -18,6 +18,8 @@ import {
   drawSkeleton,
   type PoseLandmarkerLike,
 } from '@/lib/vision/pose-landmarker'
+import { analyzeVideoWithAI } from '@/lib/ai-service'
+import { createBrowserSupabaseClient } from '@/lib/supabase/client'
 
 export type LiveFormMetrics = AnalysisSummary & {
   tracking: boolean
@@ -56,6 +58,14 @@ export function LiveFormCoach({ visionKind, exerciseName, active, onMetricsChang
   const [snapshot, setSnapshot] = useState<AnalyzerSnapshot | null>(null)
   const [flash, setFlash] = useState(false)
 
+  // AI Fallback states
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const chunksRef = useRef<Blob[]>([])
+  const [aiFallbackAvailable, setAiFallbackAvailable] = useState(false)
+  const [aiAnalyzing, setAiAnalyzing] = useState(false)
+  const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null)
+  const [aiSummary, setAiSummary] = useState<AnalysisSummary | null>(null)
+
   useEffect(() => {
     onMetricsRef.current = onMetricsChange
   }, [onMetricsChange])
@@ -77,6 +87,8 @@ export function LiveFormCoach({ visionKind, exerciseName, active, onMetricsChang
     if (!visionKind) return
     stateRef.current = createAnalyzerState(visionKind)
     setSnapshot(null)
+    setAiFallbackAvailable(false)
+    setAiSummary(null)
     emit(false, visionSetupHint(visionKind))
   }, [visionKind, exerciseName, emit])
 
@@ -146,6 +158,24 @@ export function LiveFormCoach({ visionKind, exerciseName, active, onMetricsChang
           videoRef.current.srcObject = stream
           await videoRef.current.play()
         }
+        
+        chunksRef.current = []
+        const mimeType = 'video/webm'
+        if (MediaRecorder.isTypeSupported(mimeType)) {
+          const recorder = new MediaRecorder(stream, { mimeType })
+          recorder.ondataavailable = (e) => {
+            if (e.data.size > 0) {
+              chunksRef.current.push(e.data)
+              // Keep about 15 seconds of video (assuming 1s chunks)
+              if (chunksRef.current.length > 15) {
+                chunksRef.current.shift()
+              }
+            }
+          }
+          recorder.start(1000)
+          mediaRecorderRef.current = recorder
+        }
+
         loop()
       } catch (caught) {
         const message =
@@ -169,6 +199,12 @@ export function LiveFormCoach({ visionKind, exerciseName, active, onMetricsChang
       if (frameRef.current) cancelAnimationFrame(frameRef.current)
       landmarkerRef.current?.close()
       landmarkerRef.current = null
+      
+      if (mediaRecorderRef.current) {
+        mediaRecorderRef.current.stop()
+        mediaRecorderRef.current = null
+      }
+      
       streamRef.current?.getTracks().forEach((track) => track.stop())
       streamRef.current = null
       lastTimeRef.current = -1
@@ -209,11 +245,25 @@ export function LiveFormCoach({ visionKind, exerciseName, active, onMetricsChang
         </div>
         <button
           type="button"
-          onClick={() => setEnabled((value) => !value)}
-          disabled={loading}
+          onClick={() => {
+            if (enabled) {
+              // Stopping: if no reps were detected locally, prepare the fallback
+              if (stateRef.current.reps === 0 && chunksRef.current.length > 0) {
+                const blob = new Blob(chunksRef.current, { type: 'video/webm' })
+                setRecordedBlob(blob)
+                setAiFallbackAvailable(true)
+              }
+            } else {
+              // Starting: reset AI states
+              setAiFallbackAvailable(false)
+              setAiSummary(null)
+            }
+            setEnabled((value) => !value)
+          }}
+          disabled={loading || aiAnalyzing}
           className="focus-ring inline-flex shrink-0 items-center gap-2 rounded-lg bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-60"
         >
-          {loading ? (
+          {loading || aiAnalyzing ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : enabled ? (
             <CameraOff className="h-4 w-4" />
@@ -272,15 +322,57 @@ export function LiveFormCoach({ visionKind, exerciseName, active, onMetricsChang
       ) : null}
 
       <div className="grid grid-cols-4 divide-x divide-border border-t border-border">
-        <Metric label="Reps" value={String(summary.rep_count)} />
-        <Metric label="Depth" value={`${snapshot?.depthPercent ?? 0}%`} />
-        <Metric label="Form" value={summary.form_score ? String(summary.form_score) : '—'} />
-        <Metric label="Tracking" value={`${summary.tracking_quality}%`} />
+        <Metric label="Reps" value={aiSummary ? String(aiSummary.rep_count) : String(summary.rep_count)} />
+        <Metric label="Depth" value={`${aiSummary ? aiSummary.average_depth : (snapshot?.depthPercent ?? 0)}%`} />
+        <Metric label="Form" value={aiSummary ? String(aiSummary.form_score) : (summary.form_score ? String(summary.form_score) : '—')} />
+        <Metric label="Tracking" value={`${aiSummary ? aiSummary.tracking_quality : summary.tracking_quality}%`} />
       </div>
 
-      {summary.form_warnings.length ? (
+      {aiFallbackAvailable && !aiAnalyzing && !aiSummary ? (
+        <div className="border-t border-border bg-primary/5 px-5 py-4">
+          <p className="text-sm font-medium text-foreground">Local tracking didn't detect your reps.</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            We recorded a snippet of your session. Our AI coach can analyze it in the cloud.
+          </p>
+          <button
+            type="button"
+            onClick={async () => {
+              if (!recordedBlob) return
+              setAiAnalyzing(true)
+              setError(null)
+              try {
+                const supabase = createBrowserSupabaseClient()
+                const sessionResponse = await supabase?.auth.getSession()
+                const token = sessionResponse?.data.session?.access_token || null
+                
+                const result = await analyzeVideoWithAI(recordedBlob, visionKind, token)
+                if (result?.summary) {
+                  setAiSummary(result.summary)
+                  setAiFallbackAvailable(false)
+                  onMetricsRef.current({
+                    ...result.summary,
+                    tracking: true,
+                    current_cue: "AI Analysis Complete"
+                  })
+                } else {
+                  setError('AI analysis failed. Please try again.')
+                }
+              } catch (e) {
+                setError('An error occurred during AI analysis.')
+              } finally {
+                setAiAnalyzing(false)
+              }
+            }}
+            className="mt-3 focus-ring inline-flex items-center gap-2 rounded-lg bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90"
+          >
+            Analyze with AI Coach
+          </button>
+        </div>
+      ) : null}
+
+      {(aiSummary?.form_warnings.length || summary.form_warnings.length) ? (
         <ul className="space-y-1.5 border-t border-border px-5 py-4">
-          {summary.form_warnings.map((warning) => (
+          {(aiSummary ? aiSummary.form_warnings : summary.form_warnings).map((warning) => (
             <li key={warning} className="flex items-start gap-2 text-sm text-muted-foreground">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
               {warning}

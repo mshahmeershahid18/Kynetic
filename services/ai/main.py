@@ -13,12 +13,13 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, File, Form, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 import fallback_generator
 import gemini_client
+import video_analyzer
 from config import settings
 from feedback_engine import build_feedback
 from security import AuthedUser, require_user
@@ -142,3 +143,20 @@ def generate_feedback(
 
     logger.info("Generated feedback via %s for user %s", generator, user.user_id or "anonymous")
     return {"status": "ok", "generator": generator, "feedback": feedback}
+
+
+@app.post("/analyze-video")
+async def analyze_video(
+    video: UploadFile = File(...),
+    kind: str = Form(...),
+    user: AuthedUser = Depends(require_user),
+) -> dict[str, Any]:
+    logger.info("Received video analysis request for user %s, kind: %s", user.user_id or "anonymous", kind)
+    video_bytes = await video.read()
+    
+    result = video_analyzer.analyze_exercise_video(video_bytes, kind, video.content_type)
+    if result is None:
+        return {"status": "error", "message": "Failed to analyze video."}
+        
+    return {"status": "ok", "summary": result}
+

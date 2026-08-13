@@ -15,6 +15,8 @@ import {
   type VisionKind,
 } from '@/lib/vision/exercise-analyzers'
 import { createPoseLandmarkerWithFallback, drawSkeleton } from '@/lib/vision/pose-landmarker'
+import { analyzeVideoWithAI } from '@/lib/ai-service'
+import { createBrowserSupabaseClient } from '@/lib/supabase/client'
 
 const MAX_FILE_BYTES = 100 * 1024 * 1024 // 100 MB
 const MAX_DURATION_SECONDS = 180
@@ -47,6 +49,10 @@ export function VideoFormCheck({ lockedKind, onComplete }: VideoFormCheckProps) 
   const [summary, setSummary] = useState<AnalysisSummary | null>(null)
   const [fileName, setFileName] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  
+  const [aiFallbackAvailable, setAiFallbackAvailable] = useState(false)
+  const [aiAnalyzing, setAiAnalyzing] = useState(false)
+  const [originalFile, setOriginalFile] = useState<File | null>(null)
 
   const reset = useCallback(() => {
     if (objectUrlRef.current) {
@@ -58,6 +64,9 @@ export function VideoFormCheck({ lockedKind, onComplete }: VideoFormCheckProps) 
     setError(null)
     setSummary(null)
     setFileName(null)
+    setAiFallbackAvailable(false)
+    setAiAnalyzing(false)
+    setOriginalFile(null)
     if (inputRef.current) inputRef.current.value = ''
   }, [])
 
@@ -74,6 +83,9 @@ export function VideoFormCheck({ lockedKind, onComplete }: VideoFormCheckProps) 
       setSummary(null)
       setProgress(0)
       setFileName(file.name)
+      setOriginalFile(file)
+      setAiFallbackAvailable(false)
+      setAiAnalyzing(false)
 
       const video = videoRef.current
       const canvas = canvasRef.current
@@ -140,8 +152,12 @@ export function VideoFormCheck({ lockedKind, onComplete }: VideoFormCheckProps) 
         setSummary(result)
         setProgress(100)
         setStatus('done')
+        
+        if (result.rep_count === 0) {
+          setAiFallbackAvailable(true)
+        }
 
-        if (onComplete) {
+        if (onComplete && result.rep_count > 0) {
           setSaving(true)
           try {
             await onComplete(kind, result)
@@ -159,7 +175,41 @@ export function VideoFormCheck({ lockedKind, onComplete }: VideoFormCheckProps) 
     [kind, onComplete]
   )
 
-  const busy = status === 'analyzing'
+  const analyzeWithAI = useCallback(async () => {
+    if (!originalFile) return
+    setAiAnalyzing(true)
+    setError(null)
+    
+    try {
+      const supabase = createBrowserSupabaseClient()
+      const sessionResponse = await supabase?.auth.getSession()
+      const token = sessionResponse?.data.session?.access_token || null
+      
+      const result = await analyzeVideoWithAI(originalFile, kind, token)
+      
+      if (result?.summary) {
+        setSummary(result.summary)
+        setAiFallbackAvailable(false)
+        
+        if (onComplete) {
+          setSaving(true)
+          try {
+            await onComplete(kind, result.summary)
+          } finally {
+            setSaving(false)
+          }
+        }
+      } else {
+        setError('AI analysis failed. Please try again or record a better video.')
+      }
+    } catch (caught) {
+      setError('An error occurred during AI analysis.')
+    } finally {
+      setAiAnalyzing(false)
+    }
+  }, [originalFile, kind, onComplete])
+
+  const busy = status === 'analyzing' || aiAnalyzing
 
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-card">
@@ -227,15 +277,19 @@ export function VideoFormCheck({ lockedKind, onComplete }: VideoFormCheckProps) 
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-sm font-medium">
               <Loader2 className="h-4 w-4 animate-spin text-primary" />
-              Analysing {fileName}
+              {aiAnalyzing ? `AI Coach is analyzing ${fileName}...` : `Analysing ${fileName}`}
             </div>
-            <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-              <div
-                className="h-full rounded-full bg-primary transition-all"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-            <p className="text-xs text-muted-foreground">{progress}% · this runs entirely in your browser</p>
+            {!aiAnalyzing && (
+              <>
+                <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-primary transition-all"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">{progress}% · this runs entirely in your browser</p>
+              </>
+            )}
           </div>
         ) : null}
 
@@ -285,6 +339,22 @@ export function VideoFormCheck({ lockedKind, onComplete }: VideoFormCheckProps) 
                   </li>
                 ))}
               </ul>
+            ) : null}
+
+            {aiFallbackAvailable && !aiAnalyzing ? (
+              <div className="mt-4 rounded-xl border border-primary/20 bg-primary/5 p-4">
+                <p className="text-sm font-medium text-foreground">Local tracking couldn't detect your reps.</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Our advanced AI coach can analyze this video in the cloud for a deeper form check.
+                </p>
+                <button
+                  type="button"
+                  onClick={analyzeWithAI}
+                  className="mt-3 focus-ring inline-flex items-center gap-2 rounded-lg bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90"
+                >
+                  Analyze with AI Coach
+                </button>
+              </div>
             ) : null}
 
             <div className="flex items-center gap-3">
