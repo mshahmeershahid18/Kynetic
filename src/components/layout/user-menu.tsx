@@ -58,7 +58,7 @@ export function UserMenu({ name, email, photoUrl }: Props) {
       {open ? (
         <div
           role="menu"
-          className="absolute left-0 z-50 mt-2 w-60 overflow-hidden rounded-xl border border-border bg-card shadow-lg"
+          className="absolute right-0 z-50 mt-2 w-60 overflow-hidden rounded-xl border border-border bg-card shadow-lg"
         >
           <div className="flex items-center gap-3 border-b border-border px-4 py-3">
             <ProfileAvatar src={photoUrl} name={name} email={email} size="sm" />

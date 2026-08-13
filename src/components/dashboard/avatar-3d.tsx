@@ -178,8 +178,6 @@ export function Avatar3D({ params, className }: Avatar3DProps) {
     // --- Build once the mesh arrives ---------------------------------------
     let geometry: THREE.BufferGeometry | null = null
     let material: THREE.MeshStandardMaterial | null = null
-    let groundGeometry: THREE.BufferGeometry | null = null
-    let groundMaterial: THREE.Material | null = null
 
     loadBaseMesh()
       .then((mesh) => {
@@ -199,18 +197,12 @@ export function Avatar3D({ params, className }: Avatar3DProps) {
           metalness: 0.04,
         })
 
+        // Self-shadowing only: the figure floats against the card background
+        // with no contact shadow beneath it.
         const body = new THREE.Mesh(geometry, material)
         body.castShadow = true
         body.receiveShadow = true
         pivot.add(body)
-
-        // Soft contact shadow so the figure is grounded rather than floating.
-        groundGeometry = new THREE.CircleGeometry(1, 48)
-        groundMaterial = new THREE.ShadowMaterial({ opacity: 0.22 })
-        const ground = new THREE.Mesh(groundGeometry, groundMaterial)
-        ground.rotation.x = -Math.PI / 2
-        ground.receiveShadow = true
-        scene.add(ground)
 
         let applied: BodyParams | null = null
 
@@ -235,8 +227,6 @@ export function Avatar3D({ params, className }: Avatar3DProps) {
           )
 
           body.position.y = -((box.min.y + box.max.y) / 2) * stature
-          ground.position.y = -height / 2
-          ground.scale.setScalar(Math.max(radius * 1.15, 0.05))
 
           fitHeight = height * MARGIN
           fitRadius = radius * MARGIN
@@ -298,8 +288,6 @@ export function Avatar3D({ params, className }: Avatar3DProps) {
       canvas.removeEventListener('pointercancel', endDrag)
       geometry?.dispose()
       material?.dispose()
-      groundGeometry?.dispose()
-      groundMaterial?.dispose()
       renderer.dispose()
       if (canvas.parentNode === mount) mount.removeChild(canvas)
     }

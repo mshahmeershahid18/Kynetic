@@ -1,11 +1,13 @@
 import Link from "next/link";
 
+import { Wordmark } from "@/components/brand/wordmark";
+
 export function SiteFooter() {
   return (
     <footer className="border-t border-border">
       <div className="container-shell flex flex-col items-center justify-between gap-4 py-8 sm:flex-row">
         <div className="text-center sm:text-left">
-          <p className="text-sm font-semibold tracking-tight">Kynetic</p>
+          <Wordmark size="sm" />
           <p className="mt-1 text-xs text-muted-foreground">
             AI coaching with on-device form analysis.
           </p>

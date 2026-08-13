@@ -42,7 +42,7 @@ export default async function SettingsPage() {
             <ArrowLeft className="h-3.5 w-3.5" />
             Back to dashboard
           </Link>
-          <h1 className="mt-4 text-2xl font-semibold tracking-tight sm:text-3xl">Settings</h1>
+          <h1 className="mt-4 font-display text-2xl font-semibold tracking-tight sm:text-3xl">Settings</h1>
           <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">
             Everything on your account, editable in place. Changes to your body and training
             reshape your avatar and every workout generated from now on.

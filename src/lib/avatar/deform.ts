@@ -82,6 +82,13 @@ const LEG_CENTRE_X = 0.087
 const LEG_HIP_Y = 0.45
 const LEG_ANKLE_Y = 0.02
 
+/**
+ * How far in front of the centre line the abdominal projection reaches full
+ * strength. The torso is about 0.09 deep at the waist, so half of that gives a
+ * gradient wide enough to be invisible on the shaded surface.
+ */
+const FRONT_FADE = 0.045
+
 const ARM_SHOULDER = { x: 0.125, y: 0.79 }
 const ARM_HAND = { x: 0.27, y: 0.465 }
 
@@ -320,14 +327,21 @@ export function deformBody(
           female * femaleDepthProfile(u)
       )
 
-      let tx = x * widthGain
+      const tx = x * widthGain
       let tz = cz + (z - cz) * depthGain
 
-      // Abdominal projection: forward only, so the back stays flat.
-      if (z > cz) {
-        tz += mass * 0.055 * bump(u, 0.575, 0.13)
-        tz += bustAmount * bump(u, 0.745, 0.045) * smoothstep(0.16, 0.02, Math.abs(x))
-      }
+      /**
+       * Abdominal projection: forward only, so the back stays flat.
+       *
+       * The weight has to fade in with distance from the centre line rather
+       * than switching on at `z > cz`. A hard switch displaces the vertex just
+       * in front of the axis by the full amount and its neighbour behind by
+       * nothing, which shows up as a ridge encircling the belly — subtle when
+       * the term pushed outward, obvious now that a lean profile pulls inward.
+       */
+      const front = smoothstep(0, FRONT_FADE, z - cz)
+      tz += mass * 0.055 * bump(u, 0.575, 0.13) * front
+      tz += bustAmount * bump(u, 0.745, 0.045) * smoothstep(0.16, 0.02, Math.abs(x)) * front
 
       nx += (tx - x) * torsoWeight
       nz += (tz - z) * torsoWeight

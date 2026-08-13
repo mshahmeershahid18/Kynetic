@@ -2,6 +2,7 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { Activity, Camera, Sparkles } from 'lucide-react'
 
+import { Wordmark } from '@/components/brand/wordmark'
 import { Reveal } from '@/components/motion/reveal'
 
 const HIGHLIGHTS = [
@@ -48,7 +49,7 @@ export function AuthShell({
             <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
               {eyebrow}
             </p>
-            <h1 className="mt-2 text-2xl font-semibold tracking-tight">{title}</h1>
+            <h1 className="mt-2 font-display text-2xl font-semibold tracking-tight">{title}</h1>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{description}</p>
           </div>
 
@@ -64,25 +65,31 @@ export function AuthShell({
         </Reveal>
       </div>
 
-      {/* Product summary -------------------------------------------------- */}
-      <aside className="hidden border-l border-border bg-muted/30 lg:flex lg:items-center lg:px-12">
-        <div className="max-w-md">
-          <Link href="/" className="focus-ring rounded-md text-lg font-semibold tracking-tight">
-            Kynetic
+      <aside className="relative hidden lg:flex lg:items-center lg:justify-center lg:px-12 border-l border-border overflow-hidden">
+        <img 
+          src="/low-angle-view-unrecognizable-muscular-build-man-preparing-lifting-barbell-health-club.jpg"
+          alt="Muscular build man preparing lifting barbell"
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+        <div className="absolute inset-0 bg-black/70 backdrop-blur-[2px]" />
+        
+        <div className="relative z-10 max-w-md text-white">
+          <Link href="/" className="focus-ring inline-flex rounded-md text-white">
+            <Wordmark size="md" className="text-white" />
           </Link>
-          <p className="mt-4 text-xl font-semibold leading-snug tracking-tight">
+          <p className="mt-6 font-display text-xl font-semibold leading-snug tracking-tight">
             An AI coach that actually watches you train.
           </p>
 
           <ul className="mt-8 space-y-6">
             {HIGHLIGHTS.map((item) => (
               <li key={item.title} className="flex gap-4">
-                <span className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-border bg-background">
-                  <item.icon className="h-4 w-4 text-muted-foreground" />
+                <span className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-white/20 bg-black/40">
+                  <item.icon className="h-4 w-4 text-white/80" />
                 </span>
                 <span>
                   <span className="block text-sm font-medium">{item.title}</span>
-                  <span className="mt-1 block text-sm leading-relaxed text-muted-foreground">
+                  <span className="mt-1 block text-sm leading-relaxed text-white/60">
                     {item.body}
                   </span>
                 </span>

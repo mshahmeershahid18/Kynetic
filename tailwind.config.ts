@@ -23,6 +23,8 @@ const config: Config = {
       },
       fontFamily: {
         sans: ["var(--font-sans)", "Inter", "system-ui", "sans-serif"],
+        // Wordmark and page-level headings only — see components/brand/wordmark.
+        display: ["var(--font-display)", "Space Grotesk", "var(--font-sans)", "sans-serif"],
       },
       boxShadow: {
         glow: "0 0 80px hsl(var(--primary) / 0.24)",

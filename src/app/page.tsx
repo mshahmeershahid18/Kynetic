@@ -107,7 +107,7 @@ export default function Home() {
               <p data-animate className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 What you get
               </p>
-              <h2 data-animate className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">
+              <h2 data-animate className="mt-2 font-display text-2xl font-semibold tracking-tight sm:text-3xl">
                 The whole coaching loop, in one place.
               </h2>
             </div>
@@ -135,7 +135,7 @@ export default function Home() {
               <p data-animate className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 How it works
               </p>
-              <h2 data-animate className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">
+              <h2 data-animate className="mt-2 font-display text-2xl font-semibold tracking-tight sm:text-3xl">
                 From sign-up to your first coached session.
               </h2>
             </div>
@@ -158,7 +158,7 @@ export default function Home() {
       <section className="border-b border-border bg-muted/20">
         <AnimatedSection>
           <div className="container-shell max-w-3xl py-20 text-center sm:py-24">
-            <h2 data-animate className="text-2xl font-semibold tracking-tight sm:text-3xl">
+            <h2 data-animate className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">
               We only coach what a camera can actually judge.
             </h2>
             <p data-animate className="mx-auto mt-4 max-w-xl text-sm leading-relaxed text-muted-foreground sm:text-base">
@@ -175,7 +175,7 @@ export default function Home() {
       <section>
         <AnimatedSection>
           <div className="container-shell max-w-3xl py-20 text-center sm:py-28">
-            <h2 data-animate className="text-2xl font-semibold tracking-tight sm:text-4xl">
+            <h2 data-animate className="font-display text-2xl font-semibold tracking-tight sm:text-4xl">
               Start training with a coach that adapts.
             </h2>
             <p data-animate className="mx-auto mt-4 max-w-lg text-sm leading-relaxed text-muted-foreground sm:text-base">

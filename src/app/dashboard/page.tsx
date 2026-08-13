@@ -88,14 +88,14 @@ export default async function DashboardPage({
         {/* Header --------------------------------------------------------- */}
         <header className="flex flex-wrap items-center justify-between gap-4 animate-fade-in-up">
           <div className="min-w-0">
-            <h1 className="truncate text-2xl font-bold tracking-tight sm:text-3xl">
+            <h1 className="truncate font-display text-2xl font-bold tracking-tight sm:text-3xl">
               {firstName ? `Welcome back, ${firstName}` : 'Dashboard'}
             </h1>
             <div className="mt-2 flex flex-wrap items-center gap-2 text-sm font-medium">
               <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-primary">Level {game.level}</span>
               <span className="rounded-full bg-muted px-2.5 py-0.5 text-muted-foreground tabular-nums">{game.xp.toLocaleString()} XP</span>
               {hasTrained ? (
-                <span className="rounded-full bg-accent/10 px-2.5 py-0.5 text-accent-foreground tabular-nums">
+                <span className="rounded-full bg-orange-500/10 px-2.5 py-0.5 text-orange-600 dark:text-orange-400 tabular-nums">
                   {game.currentStreak} day{game.currentStreak === 1 ? '' : 's'} streak
                 </span>
               ) : null}

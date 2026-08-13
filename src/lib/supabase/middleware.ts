@@ -42,6 +42,20 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // Second factor. `nextLevel` is aal2 whenever the account has a verified
+  // authenticator, so a session that has only presented a password is held at
+  // the challenge screen rather than being let through to the app.
+  if (isProtectedRoute && user) {
+    const { data: assurance } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+
+    if (assurance?.nextLevel === "aal2" && assurance.currentLevel !== "aal2") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/auth/mfa";
+      url.search = `?next=${encodeURIComponent(request.nextUrl.pathname)}`;
+      return NextResponse.redirect(url);
+    }
+  }
+
   if (isAuthRoute && user) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";

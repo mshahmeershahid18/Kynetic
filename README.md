@@ -150,3 +150,8 @@ npm run typecheck  # tsc --noEmit
 
 See [status.md](status.md) for a phase-by-phase status, the design decisions
 behind it, and the known gaps.
+
+## AI and Reuse Disclosure
+
+This project was built with the assistance of Artificial Intelligence (AI) tools for coding, design, and content generation. Portions of this codebase, including but not limited to the AI service integrations and UI layout, rely on existing libraries and frameworks as documented. 
+The 3D base mesh and underlying logic for computer vision (MediaPipe) incorporate open-source models and resources that have been adapted for this specific use case. All AI interactions and generated code have been reviewed and tested.

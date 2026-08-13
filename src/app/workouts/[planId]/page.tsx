@@ -84,7 +84,7 @@ export default async function WorkoutPlanPage({
                   {workout.generator === "gemini" ? "AI generated" : "Generated workout"}
                 </p>
               </div>
-              <h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">{workout.title}</h1>
+              <h1 className="mt-2 font-display text-2xl font-semibold tracking-tight sm:text-3xl">{workout.title}</h1>
               {workout.summary ? (
                 <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
                   {workout.summary}

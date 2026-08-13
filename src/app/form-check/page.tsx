@@ -47,7 +47,7 @@ export default async function FormCheckPage() {
         </Link>
 
         <header className="mb-8 mt-6" data-animate>
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Form check</h1>
+          <h1 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">Form check</h1>
           <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">
             Not in the mood for a live session? Film one set, upload it here, and Kynetic
             counts your reps and scores your technique. Everything is analysed on your own

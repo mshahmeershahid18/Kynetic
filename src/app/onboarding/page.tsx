@@ -32,7 +32,7 @@ export default async function OnboardingPage() {
     <main className="min-h-screen bg-muted/20 px-4 py-12">
       <Reveal className="mx-auto max-w-2xl">
         <header className="mb-8 text-center" data-animate>
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+          <h1 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">
             Set up your profile
           </h1>
           <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">

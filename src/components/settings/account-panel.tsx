@@ -11,6 +11,7 @@ import {
   type SettingsState,
 } from '@/app/settings/actions'
 import { Field, FormStatus, SubmitButton, inputClass } from '@/components/forms/fields'
+import { MfaPanel } from '@/components/settings/mfa-panel'
 import { SectionCard } from '@/components/settings/section-card'
 
 type Props = {
@@ -40,6 +41,8 @@ export function AccountPanel({ email, hasPassword, providers }: Props) {
       >
         {hasPassword ? <PasswordForm /> : <ResetLinkForm email={email} />}
       </SectionCard>
+
+      <MfaPanel />
 
       <SectionCard
         title="Sign-in methods"

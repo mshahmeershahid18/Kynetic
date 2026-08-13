@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { Wordmark } from "@/components/brand/wordmark";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { UserMenu } from "@/components/layout/user-menu";
 import { resolveProfilePhoto, providerFullName } from "@/lib/profiles/photo";
@@ -24,31 +25,19 @@ export async function SiteHeader() {
     <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-xl">
       <div className="container-shell flex h-16 items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          {user ? <UserMenu name={name} email={user.email ?? null} photoUrl={photoUrl} /> : null}
-
           <Link
             href={user ? "/dashboard" : "/"}
-            className="focus-ring rounded-md text-lg font-semibold tracking-tight"
+            className="focus-ring rounded-md"
           >
-            Kynetic
+            <Wordmark size="md" />
           </Link>
-
-          <nav className="hidden items-center gap-6 pl-4 text-sm text-muted-foreground md:flex">
-            {user ? (
-              <Link className="transition hover:text-foreground" href="/form-check">
-                Form check
-              </Link>
-            ) : (
-              <Link className="transition hover:text-foreground" href="/#features">
-                Features
-              </Link>
-            )}
-          </nav>
         </div>
 
         <div className="flex items-center gap-2">
           <ThemeToggle />
-          {user ? null : (
+          {user ? (
+            <UserMenu name={name} email={user.email ?? null} photoUrl={photoUrl} />
+          ) : (
             <>
               <Link
                 className="focus-ring hidden rounded-lg px-3.5 py-2 text-sm font-medium text-muted-foreground transition hover:text-foreground sm:inline-flex"
