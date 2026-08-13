@@ -11,3 +11,8 @@ __pycache__
 .venv
 *.pyc
 .DS_Store
+gigs/gig-1-full-stack-app.md
+gigs/gig-2-pose-detection.md
+gigs/gig-3-ai-workout-engine.md
+.gitignore
+gigs/gig-4-3d-avatar.md

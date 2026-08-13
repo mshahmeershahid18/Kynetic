@@ -53,17 +53,9 @@ export default function Home() {
 
         <AnimatedSection>
           <div className="container-shell max-w-5xl py-20 text-center sm:py-28">
-            <p
-              data-animate
-              className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3.5 py-1.5 text-xs font-medium text-muted-foreground"
-            >
-              <Sparkles className="h-3.5 w-3.5" />
-              Powered by Google Gemini
-            </p>
-
             <h1
               data-animate
-              className="mx-auto mt-6 max-w-3xl text-4xl font-semibold leading-[1.1] tracking-tight sm:text-5xl lg:text-6xl"
+              className="mx-auto max-w-3xl text-4xl font-semibold leading-[1.1] tracking-tight sm:text-5xl lg:text-6xl"
             >
               An AI fitness coach that actually watches you train.
             </h1>
