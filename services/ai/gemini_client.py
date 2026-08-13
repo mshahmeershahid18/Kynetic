@@ -232,6 +232,30 @@ def _format_history(context: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _format_recent_plans(context: dict[str, Any]) -> str:
+    """Tells the model what it already prescribed.
+
+    Without this the model sees an identical prompt on every generation and, at
+    any temperature, keeps landing on the same handful of obvious movements.
+    """
+    plans = context.get("recent_plans") or []
+    slugs = context.get("recent_exercise_slugs") or []
+    if not plans and not slugs:
+        return "RECENTLY PRESCRIBED\n- nothing yet; this is their first plan."
+
+    lines = ["RECENTLY PRESCRIBED (make this session meaningfully different)"]
+    for index, plan in enumerate(plans[:4], start=1):
+        title = plan.get("title") or "untitled"
+        lines.append(f"- plan {index}: '{title}'")
+    if slugs:
+        lines.append(f"- movements used recently: {', '.join(str(slug) for slug in slugs[:20])}")
+    lines.append(
+        "- vary the focus, exercise selection, and rep scheme from the above while still "
+        "serving the user's goal."
+    )
+    return "\n".join(lines)
+
+
 def generate_workout(profile: dict[str, Any], context: dict[str, Any]) -> dict[str, Any] | None:
     library = context.get("exercise_library") or []
 
@@ -256,6 +280,8 @@ USER PROFILE
 
 RECENT PERFORMANCE
 {_format_history(context)}
+
+{_format_recent_plans(context)}
 
 EXERCISE LIBRARY (you may only use these)
 {_format_library(library)}

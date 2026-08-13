@@ -58,9 +58,33 @@ export async function generateWorkoutAction() {
     .order("created_at", { ascending: false })
     .limit(5);
 
+  // Plans already generated, not just sessions completed. Two generations in a
+  // row see identical session history, so without this the generator has no way
+  // to tell them apart and hands back the same workout twice.
+  const { data: recentPlans, count: plansGenerated } = await supabase
+    .from("workout_plans")
+    .select("id, title, goal, difficulty, created_at, plan", { count: "exact" })
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false })
+    .limit(5);
+
   const context = {
     recent_sessions: recentSessions ?? [],
     recent_feedback: recentFeedback ?? [],
+    recent_plans: recentPlans ?? [],
+    plans_generated: plansGenerated ?? 0,
+    // Exercises already prescribed recently, so the model can deliberately
+    // choose something else.
+    recent_exercise_slugs: Array.from(
+      new Set(
+        (recentPlans ?? []).flatMap((row) => {
+          const plan = (row as { plan?: { blocks?: Array<{ exercises?: Array<{ slug?: string }> }> } }).plan;
+          return (plan?.blocks ?? []).flatMap((block) =>
+            (block.exercises ?? []).map((exercise) => exercise.slug).filter(Boolean)
+          );
+        })
+      )
+    ).slice(0, 20),
   };
 
   const { plan, source } = await generateWorkoutPlan({

@@ -39,13 +39,23 @@ const VISIBILITY_FLOOR = 0.45;
 // Geometry
 // ---------------------------------------------------------------------------
 
+/**
+ * Angle ABC in degrees.
+ *
+ * Uses the z component when the landmarks carry one. MediaPipe's world
+ * landmarks are metric 3D, so a knee that bends partly toward the camera is
+ * still measured correctly; with flat 2D input the same movement reads as a
+ * straighter leg than it is. Callers pass world landmarks whenever the model
+ * provides them — see `resolveFrame`.
+ */
 export function angleBetween(a: Landmark2D, b: Landmark2D, c: Landmark2D): number {
-  const ab = { x: a.x - b.x, y: a.y - b.y };
-  const cb = { x: c.x - b.x, y: c.y - b.y };
-  const abLength = Math.hypot(ab.x, ab.y);
-  const cbLength = Math.hypot(cb.x, cb.y);
+  const ab = { x: a.x - b.x, y: a.y - b.y, z: (a.z ?? 0) - (b.z ?? 0) };
+  const cb = { x: c.x - b.x, y: c.y - b.y, z: (c.z ?? 0) - (b.z ?? 0) };
+  const abLength = Math.hypot(ab.x, ab.y, ab.z);
+  const cbLength = Math.hypot(cb.x, cb.y, cb.z);
   if (!abLength || !cbLength) return 180;
-  const cosine = Math.min(1, Math.max(-1, (ab.x * cb.x + ab.y * cb.y) / (abLength * cbLength)));
+  const dot = ab.x * cb.x + ab.y * cb.y + ab.z * cb.z;
+  const cosine = Math.min(1, Math.max(-1, dot / (abLength * cbLength)));
   return Math.round((Math.acos(cosine) * 180) / Math.PI);
 }
 
@@ -73,6 +83,53 @@ function bestSide(landmarks: Landmark2D[], left: number[], right: number[]) {
   return score(left) >= score(right) ? left : right;
 }
 
+/**
+ * How far a segment tilts away from vertical, as tan(angle): 0 is upright,
+ * 1.0 is 45 degrees. Computed in three dimensions, so it does not depend on
+ * the camera standing at any particular angle to the movement.
+ */
+function tiltFromVertical(top: Landmark2D, bottom: Landmark2D) {
+  const dx = top.x - bottom.x;
+  const dy = Math.abs(top.y - bottom.y);
+  const dz = (top.z ?? 0) - (bottom.z ?? 0);
+  return Math.hypot(dx, dz) / Math.max(dy, 1e-4);
+}
+
+/**
+ * Chooses the coordinate space the analyzers measure in.
+ *
+ * World landmarks are metric and camera-independent, so they are used whenever
+ * MediaPipe supplies them. They carry no reliable visibility, so that field is
+ * taken from the normalised set. Falling back to normalised coordinates means
+ * correcting x by the frame's aspect ratio: x and y are fractions of *width*
+ * and *height*, so on a 16:9 frame an uncorrected x is compressed by 1.78 and
+ * every joint angle comes out wrong.
+ */
+export function resolveFrame(
+  landmarks: Landmark2D[] | undefined,
+  worldLandmarks?: Landmark2D[],
+  aspect = 1
+): Landmark2D[] | undefined {
+  if (worldLandmarks?.length) {
+    return worldLandmarks.map((point, index) => ({
+      x: point.x,
+      y: point.y,
+      z: point.z ?? 0,
+      visibility: landmarks?.[index]?.visibility ?? point.visibility ?? 1,
+    }));
+  }
+
+  if (!landmarks?.length) return undefined;
+
+  return landmarks.map((point) => ({
+    x: point.x * aspect,
+    y: point.y,
+    // Normalised z is in the same units as x, so it needs the same correction.
+    z: (point.z ?? 0) * aspect,
+    visibility: point.visibility,
+  }));
+}
+
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
@@ -93,6 +150,19 @@ export type AnalyzerState = {
   framesTracked: number;
   framesVisible: number;
   lastCue: string;
+  /** Recent raw angles, newest last. Median-filtered to reject single-frame spikes. */
+  angleHistory: number[];
+  /** Smoothed angle carried between frames. */
+  smoothedAngle: number | null;
+  /** Phase the reading is trying to move into, and for how many frames. */
+  pendingPhase: AnalyzerPhase | null;
+  pendingFrames: number;
+  /**
+   * Timestamp of the last banked rep, used to reject impossibly fast ones.
+   * Null until the first rep: video analysis starts at t = 0, so a numeric
+   * sentinel here would make the first rep of every clip look instantaneous.
+   */
+  lastRepAt: number | null;
 };
 
 export type AnalyzerFrame = {
@@ -141,6 +211,12 @@ type ExerciseConfig = {
   depthFrom: number;
   depthTo: number;
   setupHint: string;
+  /**
+   * Minimum range of motion, as a depth percentage, before a rep is banked.
+   * Without it a shallow bob that clips the contracted threshold by one degree
+   * counts the same as a full rep.
+   */
+  minDepthPercent: number;
 };
 
 const CONFIG: Record<VisionKind, ExerciseConfig> = {
@@ -151,6 +227,7 @@ const CONFIG: Record<VisionKind, ExerciseConfig> = {
     countAt: "return-to-extended",
     depthFrom: 170,
     depthTo: 90,
+    minDepthPercent: 55,
     setupHint: "Stand side-on to the camera so your hip, knee, and ankle are all visible.",
   },
   pushup: {
@@ -160,6 +237,7 @@ const CONFIG: Record<VisionKind, ExerciseConfig> = {
     countAt: "return-to-extended",
     depthFrom: 165,
     depthTo: 85,
+    minDepthPercent: 55,
     setupHint: "Place the camera side-on at floor height so your whole body is in frame.",
   },
   lunge: {
@@ -169,6 +247,7 @@ const CONFIG: Record<VisionKind, ExerciseConfig> = {
     countAt: "return-to-extended",
     depthFrom: 172,
     depthTo: 95,
+    minDepthPercent: 50,
     setupHint: "Stand side-on with room to step backward inside the frame.",
   },
   glute_bridge: {
@@ -178,6 +257,7 @@ const CONFIG: Record<VisionKind, ExerciseConfig> = {
     countAt: "reach-extended",
     depthFrom: 110,
     depthTo: 175,
+    minDepthPercent: 55,
     setupHint: "Lie side-on to the camera so your shoulder, hip, and knee are visible.",
   },
 };
@@ -207,7 +287,45 @@ export function createAnalyzerState(kind: VisionKind): AnalyzerState {
     framesTracked: 0,
     framesVisible: 0,
     lastCue: config.setupHint,
+    angleHistory: [],
+    smoothedAngle: null,
+    pendingPhase: null,
+    pendingFrames: 0,
+    lastRepAt: null,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Signal conditioning
+// ---------------------------------------------------------------------------
+
+/** Frames a phase change must hold for before it is believed. */
+const PHASE_CONFIRM_FRAMES = 2;
+/** Shortest credible time between two reps, in milliseconds. */
+const MIN_REP_INTERVAL_MS = 600;
+/** Weight of the newest sample in the exponential average. */
+const SMOOTHING_ALPHA = 0.45;
+const HISTORY_SIZE = 3;
+
+function median(values: number[]) {
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)];
+}
+
+/**
+ * The lite pose model jitters by several degrees frame to frame. Raw angles
+ * cross a threshold repeatedly during that jitter, which is the main source of
+ * phantom reps. A short median filter kills single-frame spikes and the
+ * exponential average smooths what is left, at the cost of ~2 frames of lag.
+ */
+function smoothAngle(state: AnalyzerState, raw: number) {
+  const history = [...state.angleHistory, raw].slice(-HISTORY_SIZE);
+  const filtered = history.length === HISTORY_SIZE ? median(history) : raw;
+  const smoothed =
+    state.smoothedAngle === null
+      ? filtered
+      : state.smoothedAngle + (filtered - state.smoothedAngle) * SMOOTHING_ALPHA;
+  return { history, smoothed };
 }
 
 // ---------------------------------------------------------------------------
@@ -249,15 +367,16 @@ function measureSquat(landmarks: Landmark2D[]): Measurement | null {
   const kneeAngle = angleBetween(hip, knee, ankle);
   const hipAngle = angleBetween(shoulder, hip, knee);
 
-  // Torso lean measured against the femur length so it is scale independent.
-  const femur = Math.hypot(hip.x - knee.x, hip.y - knee.y) || 1;
-  const lean = Math.abs(shoulder.x - hip.x) / femur;
+  // Trunk angle away from vertical. Measured in 3D so it means the same thing
+  // whether the camera is square-on, side-on, or somewhere in between.
+  const lean = tiltFromVertical(shoulder, hip);
 
   let formScore = 100;
   let warning: string | null = null;
   let liveCue: string | null = null;
 
-  if (lean > 0.55) {
+  // tan(42°) — past this the squat has become a good morning.
+  if (lean > 0.9) {
     formScore -= 22;
     warning = "Chest dropping forward at the bottom of the squat.";
     liveCue = "Lift your chest — you are leaning too far forward.";
@@ -288,13 +407,13 @@ function measureLunge(landmarks: Landmark2D[]): Measurement | null {
   if (!visible(shoulderL, shoulderR)) return null;
   const shoulder = midpoint(shoulderL, shoulderR);
 
-  const torso = Math.hypot(shoulder.x - hip.x, shoulder.y - hip.y) || 1;
-  const lean = Math.abs(shoulder.x - hip.x) / torso;
+  const lean = tiltFromVertical(shoulder, hip);
 
   let formScore = 100;
   let warning: string | null = null;
   let liveCue: string | null = null;
-  if (lean > 0.35) {
+  // tan(25°) — a lunge should stay far more upright than a squat.
+  if (lean > 0.47) {
     formScore -= 25;
     warning = "Torso tipping forward during the lunge.";
     liveCue = "Stay tall — keep your torso upright.";
@@ -378,15 +497,32 @@ function depthPercent(config: ExerciseConfig, angle: number) {
   return Math.round(clamp(((angle - config.depthFrom) / span) * 100, 0, 100));
 }
 
-export function updateAnalyzer(previous: AnalyzerState, landmarks: Landmark2D[] | undefined): AnalyzerSnapshot {
+export type AnalyzerInput = {
+  /** Normalised landmarks, used for visibility and for the drawn overlay. */
+  landmarks?: Landmark2D[];
+  /** Metric 3D landmarks. Preferred for every angle when present. */
+  worldLandmarks?: Landmark2D[];
+  /** Frame width / height, needed only when world landmarks are unavailable. */
+  aspect?: number;
+  /** Media or wall-clock time in ms, used to reject impossibly fast reps. */
+  timestampMs?: number;
+};
+
+export function updateAnalyzer(previous: AnalyzerState, input: AnalyzerInput): AnalyzerSnapshot {
   const config = CONFIG[previous.kind];
   const framesTracked = previous.framesTracked + 1;
+  const now = input.timestampMs ?? Date.now();
 
-  const reading = landmarks ? measure(previous.kind, landmarks) : null;
+  const frame = resolveFrame(input.landmarks, input.worldLandmarks, input.aspect ?? 1);
+  const reading = frame ? measure(previous.kind, frame) : null;
   if (!reading) {
     return {
       ...previous,
       framesTracked,
+      // A dropped frame is not evidence about the phase, so the confirmation
+      // counter resets rather than carrying a stale intent across the gap.
+      pendingPhase: null,
+      pendingFrames: 0,
       primaryAngle: null,
       supportAngle: null,
       depthPercent: 0,
@@ -397,7 +533,9 @@ export function updateAnalyzer(previous: AnalyzerState, landmarks: Landmark2D[] 
     };
   }
 
-  const angle = reading.primaryAngle;
+  const { history, smoothed } = smoothAngle(previous, reading.primaryAngle);
+  const angle = Math.round(smoothed);
+
   const state: AnalyzerState = {
     ...previous,
     framesTracked,
@@ -405,13 +543,59 @@ export function updateAnalyzer(previous: AnalyzerState, landmarks: Landmark2D[] 
     depthSamples: [...previous.depthSamples],
     formSamples: [...previous.formSamples],
     warnings: [...previous.warnings],
+    angleHistory: history,
+    smoothedAngle: smoothed,
   };
 
   let repCompleted = false;
   let cue = reading.liveCue ?? previous.lastCue;
 
-  const isContracted = angle <= config.contractedBelow;
-  const isExtended = angle >= config.extendedAbove;
+  /**
+   * A threshold crossing only counts once it has held for a couple of frames.
+   * One noisy frame dipping past the line used to be enough to open — and then
+   * bank — a rep the lifter never performed.
+   */
+  const confirm = (target: AnalyzerPhase, condition: boolean) => {
+    if (!condition) {
+      if (state.pendingPhase === target) {
+        state.pendingPhase = null;
+        state.pendingFrames = 0;
+      }
+      return false;
+    }
+    if (state.pendingPhase !== target) {
+      state.pendingPhase = target;
+      state.pendingFrames = 1;
+    } else {
+      state.pendingFrames += 1;
+    }
+    if (state.pendingFrames < PHASE_CONFIRM_FRAMES) return false;
+    state.pendingPhase = null;
+    state.pendingFrames = 0;
+    return true;
+  };
+
+  const isContracted = confirm("contracted", angle <= config.contractedBelow);
+  const isExtended = confirm("extended", angle >= config.extendedAbove);
+
+  /**
+   * Final gate before a rep is banked: it must cover enough range to be a real
+   * repetition, and it must not arrive faster than a human can move. Reps that
+   * fail either check still advance the phase — they were a real movement, just
+   * not a countable one — and tell the lifter why.
+   */
+  const acceptRep = (achievedDepth: number) => {
+    if (achievedDepth < config.minDepthPercent) {
+      cue = "Not counted — go deeper through the full range.";
+      return false;
+    }
+    if (state.lastRepAt !== null && now - state.lastRepAt < MIN_REP_INTERVAL_MS) {
+      cue = "Slow down — control the movement and it will count.";
+      return false;
+    }
+    state.lastRepAt = now;
+    return true;
+  };
 
   if (config.countAt === "return-to-extended") {
     // Track the deepest point reached during the descent.
@@ -424,13 +608,16 @@ export function updateAnalyzer(previous: AnalyzerState, landmarks: Landmark2D[] 
       state.peakAngle = angle;
       cue = reading.liveCue ?? "Good depth — now drive back up.";
     } else if (state.phase === "contracted" && isExtended) {
-      repCompleted = true;
-      state.reps += 1;
+      const achieved = depthPercent(config, state.peakAngle);
       state.phase = "extended";
-      state.depthSamples.push(depthPercent(config, state.peakAngle));
-      state.formSamples.push(reading.formScore);
-      if (reading.warning) state.warnings.push(reading.warning);
-      cue = `Rep ${state.reps} counted. Reset tall and go again.`;
+      if (acceptRep(achieved)) {
+        repCompleted = true;
+        state.reps += 1;
+        state.depthSamples.push(achieved);
+        state.formSamples.push(reading.formScore);
+        if (reading.warning) state.warnings.push(reading.warning);
+        cue = `Rep ${state.reps} counted. Reset tall and go again.`;
+      }
       state.peakAngle = 180;
     } else if (state.phase === "contracted") {
       cue = reading.liveCue ?? "Now press back to the top.";
@@ -447,14 +634,17 @@ export function updateAnalyzer(previous: AnalyzerState, landmarks: Landmark2D[] 
     }
 
     if (state.phase !== "extended" && isExtended) {
-      repCompleted = true;
-      state.reps += 1;
+      const achieved = depthPercent(config, angle);
       state.phase = "extended";
       state.peakAngle = angle;
-      state.depthSamples.push(depthPercent(config, angle));
-      state.formSamples.push(reading.formScore);
-      if (reading.warning) state.warnings.push(reading.warning);
-      cue = `Rep ${state.reps} counted. Squeeze, then lower with control.`;
+      if (acceptRep(achieved)) {
+        repCompleted = true;
+        state.reps += 1;
+        state.depthSamples.push(achieved);
+        state.formSamples.push(reading.formScore);
+        if (reading.warning) state.warnings.push(reading.warning);
+        cue = `Rep ${state.reps} counted. Squeeze, then lower with control.`;
+      }
     } else if (state.phase === "extended" && isContracted) {
       state.phase = "contracted";
       state.peakAngle = 0;

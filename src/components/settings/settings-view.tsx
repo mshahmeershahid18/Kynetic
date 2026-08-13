@@ -6,6 +6,7 @@ import { Dumbbell, ShieldAlert, Ruler, User, Lock } from 'lucide-react'
 import { AccountPanel } from '@/components/settings/account-panel'
 import { BodyPanel } from '@/components/settings/body-panel'
 import { DangerPanel } from '@/components/settings/danger-panel'
+import { PhotoPanel } from '@/components/settings/photo-panel'
 import { ProfilePanel } from '@/components/settings/profile-panel'
 import { TrainingPanel } from '@/components/settings/training-panel'
 import type { FitnessProfile } from '@/lib/profiles/types'
@@ -25,9 +26,20 @@ type Props = {
   email: string | null
   hasPassword: boolean
   providers: string[]
+  userId: string
+  photoUrl: string | null
+  photoFromProvider: boolean
 }
 
-export function SettingsView({ profile, email, hasPassword, providers }: Props) {
+export function SettingsView({
+  profile,
+  email,
+  hasPassword,
+  providers,
+  userId,
+  photoUrl,
+  photoFromProvider,
+}: Props) {
   const [tab, setTab] = useState<TabId>('profile')
 
   return (
@@ -65,7 +77,18 @@ export function SettingsView({ profile, email, hasPassword, providers }: Props) 
       </nav>
 
       <div className="min-w-0">
-        {tab === 'profile' ? <ProfilePanel profile={profile} /> : null}
+        {tab === 'profile' ? (
+          <div className="space-y-6">
+            <PhotoPanel
+              userId={userId}
+              photoUrl={photoUrl}
+              fromProvider={photoFromProvider}
+              name={profile?.full_name ?? null}
+              email={email}
+            />
+            <ProfilePanel profile={profile} />
+          </div>
+        ) : null}
         {tab === 'body' ? <BodyPanel profile={profile} /> : null}
         {tab === 'training' ? <TrainingPanel profile={profile} /> : null}
         {tab === 'account' ? (

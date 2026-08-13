@@ -124,7 +124,14 @@ export function VideoFormCheck({ lockedKind, onComplete }: VideoFormCheckProps) 
 
           const result = landmarker.detectForVideo(video, Math.round(time * 1000))
           const landmarks = result.landmarks?.[0]
-          state = updateAnalyzer(state, landmarks)
+          state = updateAnalyzer(state, {
+            landmarks,
+            worldLandmarks: result.worldLandmarks?.[0],
+            aspect: video.videoWidth / video.videoHeight,
+            // Media time, so the minimum-rep-interval check measures the
+            // movement in the clip rather than how long decoding took.
+            timestampMs: Math.round(time * 1000),
+          })
           drawSkeleton(canvas, landmarks, { good: true })
           setProgress(Math.min(99, Math.round((time / total) * 100)))
         }

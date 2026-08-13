@@ -47,6 +47,9 @@ create table public.profiles (
   preferred_session_minutes integer check (preferred_session_minutes between 10 and 180),
   bmi numeric,
   avatar_state text,
+  -- Profile photo. Either a public URL in the `avatars` storage bucket, or the
+  -- picture supplied by an OAuth provider on first sign-in.
+  avatar_url text,
   onboarding_completed boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -264,3 +267,42 @@ create policy "progress_delete_own" on public.progress
 
 create index progress_user_recorded_idx
   on public.progress (user_id, recorded_at desc);
+
+-- ---------------------------------------------------------------------------
+-- Storage: profile photos
+--
+-- Public bucket so an <img> can load the photo without a signed URL, but write
+-- access is restricted: a user may only touch objects under a folder named
+-- after their own uid, which is what the policies below check.
+-- ---------------------------------------------------------------------------
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'avatars',
+  'avatars',
+  true,
+  5242880, -- 5 MB
+  array['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+)
+on conflict (id) do update
+  set public = excluded.public,
+      file_size_limit = excluded.file_size_limit,
+      allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "avatars_public_read" on storage.objects;
+create policy "avatars_public_read" on storage.objects
+  for select using (bucket_id = 'avatars');
+
+drop policy if exists "avatars_insert_own" on storage.objects;
+create policy "avatars_insert_own" on storage.objects
+  for insert to authenticated
+  with check (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+
+drop policy if exists "avatars_update_own" on storage.objects;
+create policy "avatars_update_own" on storage.objects
+  for update to authenticated
+  using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+
+drop policy if exists "avatars_delete_own" on storage.objects;
+create policy "avatars_delete_own" on storage.objects
+  for delete to authenticated
+  using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);

@@ -4,6 +4,7 @@ import { ArrowLeft } from 'lucide-react'
 
 import { ConfigNotice } from '@/components/layout/config-notice'
 import { SettingsView } from '@/components/settings/settings-view'
+import { resolveProfilePhoto } from '@/lib/profiles/photo'
 import type { FitnessProfile } from '@/lib/profiles/types'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 
@@ -27,6 +28,7 @@ export default async function SettingsPage() {
   if (!profile?.onboarding_completed) redirect('/onboarding')
 
   const providers = (user.identities ?? []).map((identity) => identity.provider)
+  const photoUrl = resolveProfilePhoto(profile.avatar_url, user)
 
   return (
     <main className="min-h-screen bg-muted/20 px-4 py-10">
@@ -51,6 +53,9 @@ export default async function SettingsPage() {
           email={user.email ?? null}
           hasPassword={providers.includes('email')}
           providers={providers}
+          userId={user.id}
+          photoUrl={photoUrl}
+          photoFromProvider={!profile.avatar_url && Boolean(photoUrl)}
         />
       </div>
     </main>

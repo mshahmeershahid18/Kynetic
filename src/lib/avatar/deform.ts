@@ -33,6 +33,44 @@ export type BodyParams = {
   sex: Sex
 }
 
+/**
+ * What the source mesh already depicts.
+ *
+ * FinalBaseMesh.obj is a lean, athletic adult male — roughly BMI 23 with a few
+ * years of training behind him. Every profile is expressed as a *signed* offset
+ * from that reference, not as an addition to it. Without this, `muscle = 0`
+ * simply left the base mesh untouched, so an untrained beginner rendered with
+ * the same shoulders, arms and chest as the model.
+ *
+ * BASE_MASS is `(23 - 16) / 22` on the same BMI mapping avatarMorphs() uses.
+ */
+const BASE_MASS = 0.32
+const BASE_MUSCLE = 0.6
+
+/**
+ * Adding is more forgiving than subtracting: a body can gain half again its
+ * girth and still read as human, while the same proportional reduction reads as
+ * skeletal. Growth therefore gets the full gain and shrinkage a damped one.
+ */
+const MASS_GROW = 1.9
+const MASS_SHRINK = 1.5
+const MUSCLE_GROW = 1.9
+const MUSCLE_SHRINK = 0.85
+
+function signedGain(delta: number, grow: number, shrink: number) {
+  return delta >= 0 ? delta * grow : delta * shrink
+}
+
+/**
+ * A limb or torso can only be taken so far from the source proportions before
+ * it stops reading as a body. The floor matters most: mass and muscle both
+ * shrink the same regions, and at the extreme (BMI 16, never trained) their
+ * sum would otherwise halve the legs.
+ */
+function clampGain(gain: number) {
+  return gain < 0.74 ? 0.74 : gain > 1.9 ? 1.9 : gain
+}
+
 // --- Measured landmarks (normalised units) ----------------------------------
 const CROTCH = 0.44
 const WAIST = 0.65
@@ -236,8 +274,10 @@ export function deformBody(
   axis: BodyAxis,
   params: BodyParams
 ): void {
-  const mass = clamp01(params.mass)
-  const muscle = clamp01(params.muscle)
+  // Signed offsets from what the base mesh already is, so a lean untrained
+  // profile actually removes size rather than leaving the model as-is.
+  const mass = signedGain(clamp01(params.mass) - BASE_MASS, MASS_GROW, MASS_SHRINK)
+  const muscle = signedGain(clamp01(params.muscle) - BASE_MUSCLE, MUSCLE_GROW, MUSCLE_SHRINK)
   const female = params.sex === 'female' ? 1 : 0
 
   // Training shows less as raw width on a female frame.
@@ -267,16 +307,18 @@ export function deformBody(
     // --- Torso ------------------------------------------------------------
     if (torsoWeight > 0.001) {
       const cz = axisZ(axis, u)
-      const widthGain =
+      const widthGain = clampGain(
         1 +
-        mass * massWidthProfile(u) +
-        muscle * muscleWidthProfile(u) * muscleWidthGain +
-        female * femaleWidthProfile(u)
-      const depthGain =
+          mass * massWidthProfile(u) +
+          muscle * muscleWidthProfile(u) * muscleWidthGain +
+          female * femaleWidthProfile(u)
+      )
+      const depthGain = clampGain(
         1 +
-        mass * massDepthProfile(u) +
-        muscle * muscleDepthProfile(u) +
-        female * femaleDepthProfile(u)
+          mass * massDepthProfile(u) +
+          muscle * muscleDepthProfile(u) +
+          female * femaleDepthProfile(u)
+      )
 
       let tx = x * widthGain
       let tz = cz + (z - cz) * depthGain
@@ -299,11 +341,12 @@ export function deformBody(
 
       // Thighs thicken far more than calves and ankles.
       const along = smoothstep(LEG_ANKLE_Y, LEG_HIP_Y, u)
-      const gain =
+      const gain = clampGain(
         1 +
-        mass * (0.16 + 0.34 * along) +
-        muscle * (0.10 + 0.30 * along) +
-        female * (0.06 * along)
+          mass * (0.16 + 0.34 * along) +
+          muscle * (0.10 + 0.30 * along) +
+          female * (0.06 * along)
+      )
 
       const tx = centreX + (x - centreX) * gain
       const tz = cz + (z - cz) * gain
@@ -323,10 +366,11 @@ export function deformBody(
 
       // t = 0 at the shoulder, 1 at the hand. Upper arms carry the size.
       const toShoulder = 1 - t
-      const gain =
+      const gain = clampGain(
         1 +
-        mass * (0.10 + 0.22 * toShoulder) +
-        muscle * (0.08 + 0.42 * toShoulder) * muscleWidthGain
+          mass * (0.10 + 0.22 * toShoulder) +
+          muscle * (0.08 + 0.42 * toShoulder) * muscleWidthGain
+      )
 
       const cz = axisZ(axis, u)
       const tx = side * (cx + (Math.abs(x) - cx) * gain)
@@ -342,7 +386,9 @@ export function deformBody(
     if (headWeight > 0.001) {
       const cz = axisZ(axis, NECK)
       // The skull does not change size; the face and neck fill out a little.
-      const gain = 1 + mass * 0.11 * (1 - smoothstep(NECK, 0.95, u)) + muscle * 0.05 * (1 - smoothstep(NECK, 0.90, u))
+      const gain = clampGain(
+        1 + mass * 0.11 * (1 - smoothstep(NECK, 0.95, u)) + muscle * 0.05 * (1 - smoothstep(NECK, 0.90, u))
+      )
       const shrink = female ? 0.97 : 1
 
       const tx = x * gain * shrink

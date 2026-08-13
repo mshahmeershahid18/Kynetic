@@ -11,7 +11,96 @@ live-form-tracking capability.
 
 from __future__ import annotations
 
+import hashlib
 from typing import Any
+
+# Rotating session focuses. Consecutive generations walk this list, so a user
+# who taps "generate" three times gets three genuinely different sessions
+# instead of the same plan repeated.
+_ROTATIONS: list[dict[str, Any]] = [
+    {
+        "name": "Full body",
+        "groups": ["Lower body", "Chest", "Back", "Core", "Conditioning"],
+        "warmup": [
+            "3 minutes of easy movement to raise your temperature",
+            "10 bodyweight good mornings",
+            "10 arm circles in each direction",
+        ],
+    },
+    {
+        "name": "Push and legs",
+        "groups": ["Chest", "Shoulders", "Lower body", "Core", "Conditioning"],
+        "warmup": [
+            "2 minutes of brisk marching",
+            "10 scapular push-ups",
+            "10 slow bodyweight squats",
+        ],
+    },
+    {
+        "name": "Pull and posterior chain",
+        "groups": ["Back", "Glutes", "Hamstrings", "Core", "Conditioning"],
+        "warmup": [
+            "2 minutes of easy cardio",
+            "10 hip hinges with a slow tempo",
+            "10 band or towel pull-aparts",
+        ],
+    },
+    {
+        "name": "Lower body focus",
+        "groups": ["Lower body", "Glutes", "Hamstrings", "Core", "Conditioning"],
+        "warmup": [
+            "3 minutes of easy movement",
+            "10 leg swings per side",
+            "10 bodyweight squats",
+        ],
+    },
+]
+
+_COOLDOWNS: list[list[str]] = [
+    [
+        "60 seconds of slow nasal breathing",
+        "Standing quad stretch, 30 seconds per side",
+        "Chest and lat stretch, 30 seconds per side",
+    ],
+    [
+        "90 seconds of easy walking to bring your heart rate down",
+        "Seated hamstring stretch, 30 seconds per side",
+        "Figure-four glute stretch, 30 seconds per side",
+    ],
+    [
+        "60 seconds of box breathing",
+        "Couch stretch, 30 seconds per side",
+        "Child's pose with a side reach, 30 seconds per side",
+    ],
+]
+
+
+def _rotation_index(profile: dict[str, Any], context: dict[str, Any]) -> int:
+    """Which slot of the rotation this generation lands on.
+
+    Advances with every plan the user has *generated*, not only the ones they
+    completed. Tapping "generate" twice in a row is the common case, and both
+    calls see identical session history — so counting sessions alone would hand
+    back the same workout each time.
+
+    The most recent plan id is hashed in as well, so two users at the same plan
+    count do not march through the rotation in lockstep.
+    """
+    plans = context.get("recent_plans") or []
+    sessions = context.get("recent_sessions") or []
+    seed = int(context.get("plans_generated") or len(plans)) + len(sessions)
+
+    marker = ""
+    if plans:
+        first = plans[0] or {}
+        marker = str(first.get("id") or first.get("created_at") or "")
+    marker += str(profile.get("goal") or "")
+
+    if marker:
+        digest = hashlib.sha1(marker.encode("utf-8")).hexdigest()
+        seed += int(digest[:4], 16)
+
+    return seed
 
 # Used only when the caller supplies no library at all.
 _BUILTIN_LIBRARY: list[dict[str, Any]] = [
@@ -152,16 +241,24 @@ def generate_workout(profile: dict[str, Any], context: dict[str, Any]) -> dict[s
     if not candidates:
         candidates = list(_BUILTIN_LIBRARY)
 
-    # One exercise per muscle group, ordered largest movement first, so the
-    # session covers the body rather than hammering one area.
+    rotation = _ROTATIONS[_rotation_index(profile, context) % len(_ROTATIONS)]
+
+    # One exercise per muscle group, following this rotation's focus order so
+    # the session covers the body rather than hammering one area — and so
+    # consecutive generations do not repeat the same movements.
+    group_order = rotation["groups"] + [g for g in _MUSCLE_ORDER if g not in rotation["groups"]]
+
+    # Within a group, start from a different candidate each rotation so the
+    # same group does not always yield the same exercise.
+    offset = _rotation_index(profile, context)
+
     selected: list[dict[str, Any]] = []
     used_groups: set[str] = set()
-    for group in _MUSCLE_ORDER:
-        for entry in candidates:
-            if entry.get("muscle_group") == group and group not in used_groups:
-                selected.append(entry)
-                used_groups.add(group)
-                break
+    for group in group_order:
+        matches = [entry for entry in candidates if entry.get("muscle_group") == group]
+        if matches and group not in used_groups:
+            selected.append(matches[offset % len(matches)])
+            used_groups.add(group)
 
     for entry in candidates:
         if len(selected) >= 5:
@@ -203,24 +300,16 @@ def generate_workout(profile: dict[str, Any], context: dict[str, Any]) -> dict[s
         notes.insert(0, f"Working around your stated limitation: {limitations}.")
 
     return {
-        "title": f"{goal} session",
+        "title": f"{rotation['name']} — {goal.lower()}",
         "summary": (
-            f"A {minutes}-minute {difficulty} workout built from your goal, equipment, "
-            "and recent training history."
+            f"A {minutes}-minute {difficulty} {rotation['name'].lower()} session built from your "
+            "goal, equipment, and recent training history."
         ),
         "duration_minutes": minutes,
         "difficulty": difficulty,
         "goal": goal,
-        "warmup": [
-            "3 minutes of easy movement to raise your temperature",
-            "10 bodyweight good mornings",
-            "10 arm circles in each direction",
-        ],
-        "blocks": [{"name": "Main training block", "focus": goal, "exercises": exercises}],
-        "cooldown": [
-            "60 seconds of slow nasal breathing",
-            "Standing quad stretch, 30 seconds per side",
-            "Chest and lat stretch, 30 seconds per side",
-        ],
+        "warmup": list(rotation["warmup"]),
+        "blocks": [{"name": rotation["name"], "focus": goal, "exercises": exercises}],
+        "cooldown": list(_COOLDOWNS[offset % len(_COOLDOWNS)]),
         "coaching_notes": notes,
     }

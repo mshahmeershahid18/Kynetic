@@ -96,10 +96,16 @@ export function LiveFormCoach({ visionKind, exerciseName, active, onMetricsChang
         canvas.width = video.videoWidth
         canvas.height = video.videoHeight
 
-        const result = landmarker.detectForVideo(video, performance.now())
+        const now = performance.now()
+        const result = landmarker.detectForVideo(video, now)
         const landmarks = result.landmarks?.[0]
 
-        const next = updateAnalyzer(stateRef.current, landmarks)
+        const next = updateAnalyzer(stateRef.current, {
+          landmarks,
+          worldLandmarks: result.worldLandmarks?.[0],
+          aspect: video.videoWidth / video.videoHeight,
+          timestampMs: now,
+        })
         stateRef.current = next
         setSnapshot(next)
         drawSkeleton(canvas, landmarks, { good: next.formScore >= 75 })

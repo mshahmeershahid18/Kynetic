@@ -18,7 +18,16 @@ export type PoseLandmarkerLike = {
   detectForVideo: (
     source: HTMLVideoElement,
     timestampMs: number
-  ) => { landmarks?: Landmark2D[][] };
+  ) => {
+    /** Normalised to the frame: x and y are fractions of width and height. */
+    landmarks?: Landmark2D[][];
+    /**
+     * Metric 3D landmarks in metres, origin at the hip midpoint. Joint angles
+     * measured from these are free of both perspective and aspect-ratio
+     * distortion, which is why the analyzers prefer them.
+     */
+    worldLandmarks?: Landmark2D[][];
+  };
   close: () => void;
 };
 

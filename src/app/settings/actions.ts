@@ -197,6 +197,59 @@ export async function updateTrainingSetup(
 }
 
 // ---------------------------------------------------------------------------
+// Profile photo
+// ---------------------------------------------------------------------------
+
+/**
+ * Records a photo that the browser has already uploaded to the `avatars`
+ * bucket. The upload itself runs client-side so the image bytes never pass
+ * through the server; storage RLS confines each user to their own folder.
+ */
+export async function saveProfilePhoto(url: string): Promise<SettingsState> {
+  const session = await requireUser()
+  if ('error' in session) return session
+  const { supabase, user } = session
+
+  const trimmed = url.trim()
+  if (!trimmed) return { error: 'No photo was uploaded.' }
+
+  // Only accept a URL inside this project's avatars bucket, under this user's
+  // own folder. A client could otherwise post any URL it liked.
+  const expectedPrefix = `${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''}/storage/v1/object/public/avatars/${user.id}/`
+  if (!trimmed.startsWith(expectedPrefix)) {
+    return { error: 'That photo location is not valid.' }
+  }
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({ avatar_url: trimmed, updated_at: new Date().toISOString() })
+    .eq('id', user.id)
+
+  if (error) return { error: error.message }
+
+  revalidatePath('/settings')
+  revalidatePath('/dashboard')
+  return { ok: 'Profile photo updated.' }
+}
+
+export async function removeProfilePhoto(): Promise<SettingsState> {
+  const session = await requireUser()
+  if ('error' in session) return session
+  const { supabase, user } = session
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({ avatar_url: null, updated_at: new Date().toISOString() })
+    .eq('id', user.id)
+
+  if (error) return { error: error.message }
+
+  revalidatePath('/settings')
+  revalidatePath('/dashboard')
+  return { ok: 'Profile photo removed.' }
+}
+
+// ---------------------------------------------------------------------------
 // Email address
 // ---------------------------------------------------------------------------
 export async function updateEmailAddress(

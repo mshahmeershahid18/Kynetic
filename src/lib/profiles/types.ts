@@ -31,6 +31,8 @@ export type FitnessProfile = {
   preferred_session_minutes: number | null;
   bmi: number | null;
   avatar_state: string | null;
+  /** Profile photo: an uploaded file, or the picture from an OAuth provider. */
+  avatar_url: string | null;
   onboarding_completed: boolean;
   updated_at: string | null;
 };
